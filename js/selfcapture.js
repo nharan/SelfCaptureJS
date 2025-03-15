@@ -2339,7 +2339,29 @@ const engine = function () {
     if (parsed == NOMOVE) return false;
     else {
       MakeMove(parsed);
-      return true;
+      
+      // Return a string representation of the move for sound effects
+      const fromSq = fromSQ(parsed);
+      const toSq = toSQ(parsed);
+      const captured = CAPTURED(parsed);
+      
+      // Convert numeric squares to algebraic notation
+      const fromFile = String.fromCharCode('a'.charCodeAt(0) + FilesBrd[fromSq] - 1);
+      const fromRank = RanksBrd[fromSq];
+      const toFile = String.fromCharCode('a'.charCodeAt(0) + FilesBrd[toSq] - 1);
+      const toRank = RanksBrd[toSq];
+      
+      // Check if it's a castling move - King moving more than one square
+      if (PieceKing[GameBoard.pieces[toSq]] && Math.abs(fromSq - toSq) === 2) {
+        return "O-O"; // Kingside or queenside castle
+      }
+      
+      // Check if it's a capture
+      if (captured !== PIECES.EMPTY) {
+        return `${fromFile}${fromRank}x${toFile}${toRank}`;
+      }
+      
+      return `${fromFile}${fromRank}-${toFile}${toRank}`;
     }
   }
 
@@ -2347,6 +2369,29 @@ const engine = function () {
     if (gameStatus().over) return false;
     let bestMove = getBestMove();
     MakeMove(bestMove);
+    
+    // Return a string representation of the move for sound effects
+    const from = fromSQ(bestMove);
+    const to = toSQ(bestMove);
+    const captured = CAPTURED(bestMove);
+    
+    // Convert numeric squares to algebraic notation
+    const fromFile = String.fromCharCode('a'.charCodeAt(0) + FilesBrd[from] - 1);
+    const fromRank = RanksBrd[from];
+    const toFile = String.fromCharCode('a'.charCodeAt(0) + FilesBrd[to] - 1);
+    const toRank = RanksBrd[to];
+    
+    // Check if it's a castling move - King moving more than one square
+    if (PieceKing[GameBoard.pieces[to]] && Math.abs(from - to) === 2) {
+      return "O-O"; // Kingside or queenside castle
+    }
+    
+    // Check if it's a capture
+    if (captured !== PIECES.EMPTY) {
+      return `${fromFile}${fromRank}x${toFile}${toRank}`;
+    }
+    
+    return `${fromFile}${fromRank}-${toFile}${toRank}`;
   }
 
   function reset() {

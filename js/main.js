@@ -21,19 +21,46 @@ const stopAiVsAi = document.getElementById("stopAiVsAi");
 // Flag to track if AI vs AI match is running
 let aiVsAiRunning = false;
 
-// Sound feedback system
+// Chess sounds
 const sounds = {
+  // Basic chess sounds
+  click: new Audio('assets/sounds/click.mp3'),
+  move: new Audio('assets/sounds/move.mp3'),
+  capture: new Audio('assets/sounds/capture.mp3'),
+  castle: new Audio('assets/sounds/castle.mp3'),
+  check: new Audio('assets/sounds/move-check.mp3'),
+  
+  // Evaluation-based sounds (commented out for now)
+  /*
   bad2: new Audio('assets/sounds/bad2.mp3'),
   bad1: new Audio('assets/sounds/bad1.mp3'),
   neutral: new Audio('assets/sounds/neutral.mp3'),
   good1: new Audio('assets/sounds/good1.mp3'),
   good2: new Audio('assets/sounds/good2.mp3')
+  */
 };
 
 // Sound enabled flag
 let soundEnabled = true;
 
-// Function to play sound based on move evaluation
+// Function to play a chess sound
+function playSound(soundType) {
+  if (!soundEnabled) return;
+  
+  // Stop any currently playing sounds
+  Object.values(sounds).forEach(sound => {
+    sound.pause();
+    sound.currentTime = 0;
+  });
+  
+  // Play the requested sound
+  if (sounds[soundType]) {
+    sounds[soundType].play();
+  }
+}
+
+/*
+// Function to play sound based on move evaluation (commented out for now)
 function playSoundFeedback(evaluation) {
   if (!soundEnabled) return;
   
@@ -56,6 +83,7 @@ function playSoundFeedback(evaluation) {
     sounds.good2.play();
   }
 }
+*/
 
 // initialise engine
 var game = new engine();
@@ -81,6 +109,9 @@ board.enableMoveInput(inputHandler);
 function inputHandler(event) {
   event.chessboard.removeMarkers(MARKER_TYPE.dot);
   if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+    // Play click sound when a piece is clicked
+    playSound('click');
+    
     // If we already have a piece selected
     if (selectedPiece) {
       // Check if this is a valid destination
@@ -93,14 +124,40 @@ function inputHandler(event) {
           event.chessboard.disableMoveInput();
           event.chessboard.state.moveInputProcess.then(() => {
             event.chessboard.setPosition(game.getFEN(), true).then(() => {
-              // Get move evaluation and play sound
+              // Determine what sound to play based on the move
+              const status = game.gameStatus();
+              if (status.check) {
+                playSound('check');
+              } else if (result.includes('x')) {
+                playSound('capture');
+              } else if (result.includes('O-O')) {
+                playSound('castle');
+              } else {
+                playSound('move');
+              }
+              
+              /* Commented out evaluation-based sound
               const evaluation = game.evaluatePosition();
               playSoundFeedback(evaluation);
+              */
               
               event.chessboard.enableMoveInput(inputHandler);
               setTimeout(() => {
-                game.makeAIMove();
-                event.chessboard.setPosition(game.getFEN(), true);
+                const aiMoveResult = game.makeAIMove();
+                board.setPosition(game.getFEN(), true);
+                
+                // Play sound for AI move
+                const newStatus = game.gameStatus();
+                if (newStatus.check) {
+                  playSound('check');
+                } else if (aiMoveResult && aiMoveResult.includes('x')) {
+                  playSound('capture');
+                } else if (aiMoveResult && aiMoveResult.includes('O-O')) {
+                  playSound('castle');
+                } else {
+                  playSound('move');
+                }
+                
                 setTimeout(() => updateStatus(), 300);
               }, 500);
             });
@@ -128,14 +185,40 @@ function inputHandler(event) {
       event.chessboard.disableMoveInput();
       event.chessboard.state.moveInputProcess.then(() => {
         event.chessboard.setPosition(game.getFEN(), true).then(() => {
-          // Get move evaluation and play sound
+          // Determine what sound to play based on the move
+          const status = game.gameStatus();
+          if (status.check) {
+            playSound('check');
+          } else if (result.includes('x')) {
+            playSound('capture');
+          } else if (result.includes('O-O')) {
+            playSound('castle');
+          } else {
+            playSound('move');
+          }
+          
+          /* Commented out evaluation-based sound
           const evaluation = game.evaluatePosition();
           playSoundFeedback(evaluation);
+          */
           
           event.chessboard.enableMoveInput(inputHandler);
           setTimeout(() => {
-            game.makeAIMove();
-            event.chessboard.setPosition(game.getFEN(), true);
+            const aiMoveResult = game.makeAIMove();
+            board.setPosition(game.getFEN(), true);
+            
+            // Play sound for AI move
+            const newStatus = game.gameStatus();
+            if (newStatus.check) {
+              playSound('check');
+            } else if (aiMoveResult && aiMoveResult.includes('x')) {
+              playSound('capture');
+            } else if (aiMoveResult && aiMoveResult.includes('O-O')) {
+              playSound('castle');
+            } else {
+              playSound('move');
+            }
+            
             setTimeout(() => updateStatus(), 300);
           }, 500);
         });
@@ -185,12 +268,25 @@ reset.addEventListener("click", () => {
 
 makeMove.addEventListener("click", () => {
   setTimeout(() => {
-    game.makeAIMove();
+    const moveResult = game.makeAIMove();
     board.setPosition(game.getFEN(), true);
     
-    // Play sound for AI move (from human perspective)
+    // Determine what sound to play based on the AI's move
+    const status = game.gameStatus();
+    if (status.check) {
+      playSound('check');
+    } else if (moveResult && moveResult.includes('x')) {
+      playSound('capture');
+    } else if (moveResult && moveResult.includes('O-O')) {
+      playSound('castle');
+    } else {
+      playSound('move');
+    }
+    
+    /* Commented out evaluation-based sound
     const evaluation = -game.evaluatePosition(); // Negate because it's from human's perspective
     playSoundFeedback(evaluation);
+    */
     
     board.enableMoveInput(inputHandler);
   }, 500);
@@ -240,11 +336,24 @@ function startAiVsAiMatch() {
       return;
     }
     
-    game.makeAIMove();
+    const moveResult = game.makeAIMove();
     board.setPosition(game.getFEN(), true);
     
-    // Play sound for AI move in AI vs AI mode (neutral sound)
+    // Determine what sound to play based on the AI's move
+    const status = game.gameStatus();
+    if (status.check) {
+      playSound('check');
+    } else if (moveResult && moveResult.includes('x')) {
+      playSound('capture');
+    } else if (moveResult && moveResult.includes('O-O')) {
+      playSound('castle');
+    } else {
+      playSound('move');
+    }
+    
+    /* Commented out neutral sound for AI vs AI
     sounds.neutral.play();
+    */
     
     updateStatus();
     
