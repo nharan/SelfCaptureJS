@@ -7,7 +7,6 @@ const fen = document.getElementById("fen");
 const setFEN = document.getElementById("setFEN");
 const copyFEN = document.getElementById("copyFEN");
 const reset = document.getElementById("reset");
-const takeback = document.getElementById("takeback");
 const makeMove = document.getElementById("makeMove");
 const flipBoard = document.getElementById("flipBoard");
 const aiMove = document.getElementById("aiMove");
@@ -137,10 +136,6 @@ reset.addEventListener("click", () => {
     board.setPosition(game.getFEN(), true);
     updateStatus();
   }
-});
-
-takeBack.addEventListener("click", () => {
-  alert("Just like life, in chess, there are no takebacks.");
 });
 
 makeMove.addEventListener("click", () => {
