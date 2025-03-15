@@ -1,9 +1,4 @@
-import {
-  INPUT_EVENT_TYPE,
-  COLOR,
-  Chessboard,
-  MARKER_TYPE,
-} from "../cm-chessboard/Chessboard.js";
+import { Chessboard, MARKER_TYPE, INPUT_EVENT_TYPE, COLOR } from "../cm-chessboard/Chessboard.js";
 
 var game_over = false;
 
@@ -32,7 +27,7 @@ var game = new engine();
 // initialise chessboard
 const board = new Chessboard(document.getElementById("board"), {
   position: game.getFEN(),
-  sprite: { url: "../assets/images/chessboard-sprite-staunty.svg" },
+  sprite: { url: "assets/images/chessboard-sprite-staunty.svg" },
   animationDuration: 200,
   style: {
     moveFromMarker: MARKER_TYPE.frame,
