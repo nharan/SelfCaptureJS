@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="" />
+    <meta name="description" content="Play Self-Capture Chess - a chess variant where you can capture your own pieces" />
     <title>Self-Capture Chess</title>
 
     <!-- Bootstrap core CSS -->
@@ -19,16 +19,25 @@
     <!-- Custom styles for this template -->
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="chessboard-1.0.0.min.css" type="text/css" />
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
   </head>
   <body class="d-flex flex-column h-100">
     <!-- Begin page content -->
     <main class="flex-shrink-0">
       <div class="container">
-        <h1 class="mt-2">Self-Capture Chess</h1>
+        <h1 class="mt-4 mb-4">♞ Self-Capture Chess ♟</h1>
+        <div class="card mb-4">
+          <div class="card-body">
+            <p class="lead mb-0">Status: <span id="uiState" class="badge bg-secondary"></span></p>
+          </div>
+        </div>
 
-        <p class="lead">Status: <span id="uiState"></span></p>
-        <div class="input-group mb-2">
-          <input type="text" class="form-control fw-light" id="fen" />
+        <div class="input-group mb-3">
+          <input type="text" class="form-control fw-light" id="fen" placeholder="FEN notation" />
           <button class="btn btn-outline-secondary" id="copyFEN" type="button">
             Copy FEN
           </button>
@@ -36,48 +45,51 @@
             Set FEN
           </button>
         </div>
-        <div id="board" style="width: 100%"></div>
+        
+        <div class="board-container">
+          <div id="board" style="width: 100%"></div>
+        </div>
 
-        <div>
-          <div class="my-2 d-flex">
+        <div class="mt-4">
+          <div class="my-2 d-flex flex-wrap">
             <button
               type="button"
-              class="btn btn-outline-danger me-2"
+              class="btn btn-outline-danger me-2 mb-2"
               id="reset"
             >
               Reset
             </button>
             <button
               type="button"
-              class="btn btn-outline-primary me-2"
+              class="btn btn-outline-primary me-2 mb-2"
               id="makeMove"
             >
               AI Move
             </button>
             <button
               type="button"
-              class="btn btn-outline-primary me-2"
+              class="btn btn-outline-primary me-2 mb-2"
               id="flipBoard"
             >
               Flip
             </button>
             <button
               type="button"
-              class="btn btn-outline-success me-2"
+              class="btn btn-outline-success me-2 mb-2"
               id="aiVsAi"
             >
               AI vs AI
             </button>
             <button
               type="button"
-              class="btn btn-outline-danger me-2"
+              class="btn btn-outline-danger me-2 mb-2"
               id="stopAiVsAi"
             >
               Stop AI Match
             </button>
-            <div class="flex-grow-1 d-sm-flex d-none">
+            <div class="flex-grow-1 d-sm-flex d-none mb-2">
               <div class="input-group">
-                <label class="input-group-text" for="inputGroupSelect01"
+                <label class="input-group-text" for="thinkingTime"
                   >Thinking time:</label
                 >
                 <select class="form-select" id="thinkingTime">
@@ -89,9 +101,9 @@
               </div>
             </div>
           </div>
-          <div class="flex-grow-1 d-sm-none d-flex">
+          <div class="flex-grow-1 d-sm-none d-flex mb-2">
             <div class="input-group">
-              <label class="input-group-text" for="inputGroupSelect01"
+              <label class="input-group-text" for="thinkingTime"
                 >Thinking time:</label
               >
               <select class="form-select" id="thinkingTime">
@@ -103,8 +115,24 @@
             </div>
           </div>
         </div>
+        
+        <div class="card mt-4">
+          <div class="card-body">
+            <h5 class="card-title">About Self-Capture Chess</h5>
+            <p class="card-text">
+              Self-Capture Chess follows standard chess rules with one key difference: 
+              you can capture your own pieces! This adds a new strategic dimension to the game.
+            </p>
+          </div>
+        </div>
       </div>
     </main>
+    
+    <footer class="footer mt-auto py-3 bg-light">
+      <div class="container text-center">
+        <span class="text-muted">© 2023 Self-Capture Chess</span>
+      </div>
+    </footer>
   </body>
   <script src="js/selfcapture.js"></script>
   <script type="module" src="js/main.js"></script>
