@@ -12,6 +12,7 @@ const flipBoard = document.getElementById("flipBoard");
 const aiMove = document.getElementById("aiMove");
 const uiState = document.getElementById("uiState");
 const thinkingTime = document.getElementById("thinkingTime");
+const soundToggle = document.getElementById("soundToggle");
 // Add AI vs AI button
 const aiVsAi = document.getElementById("aiVsAi");
 // Add stop AI vs AI button
@@ -19,6 +20,42 @@ const stopAiVsAi = document.getElementById("stopAiVsAi");
 
 // Flag to track if AI vs AI match is running
 let aiVsAiRunning = false;
+
+// Sound feedback system
+const sounds = {
+  bad2: new Audio('assets/sounds/bad2.mp3'),
+  bad1: new Audio('assets/sounds/bad1.mp3'),
+  neutral: new Audio('assets/sounds/neutral.mp3'),
+  good1: new Audio('assets/sounds/good1.mp3'),
+  good2: new Audio('assets/sounds/good2.mp3')
+};
+
+// Sound enabled flag
+let soundEnabled = true;
+
+// Function to play sound based on move evaluation
+function playSoundFeedback(evaluation) {
+  if (!soundEnabled) return;
+  
+  // Mute previous sounds
+  Object.values(sounds).forEach(sound => {
+    sound.pause();
+    sound.currentTime = 0;
+  });
+  
+  // Play appropriate sound based on evaluation score
+  if (evaluation <= -2) {
+    sounds.bad2.play();
+  } else if (evaluation <= -0.5) {
+    sounds.bad1.play();
+  } else if (evaluation < 0.5) {
+    sounds.neutral.play();
+  } else if (evaluation < 2) {
+    sounds.good1.play();
+  } else {
+    sounds.good2.play();
+  }
+}
 
 // initialise engine
 var game = new engine();
@@ -56,6 +93,10 @@ function inputHandler(event) {
           event.chessboard.disableMoveInput();
           event.chessboard.state.moveInputProcess.then(() => {
             event.chessboard.setPosition(game.getFEN(), true).then(() => {
+              // Get move evaluation and play sound
+              const evaluation = game.evaluatePosition();
+              playSoundFeedback(evaluation);
+              
               event.chessboard.enableMoveInput(inputHandler);
               setTimeout(() => {
                 game.makeAIMove();
@@ -87,6 +128,10 @@ function inputHandler(event) {
       event.chessboard.disableMoveInput();
       event.chessboard.state.moveInputProcess.then(() => {
         event.chessboard.setPosition(game.getFEN(), true).then(() => {
+          // Get move evaluation and play sound
+          const evaluation = game.evaluatePosition();
+          playSoundFeedback(evaluation);
+          
           event.chessboard.enableMoveInput(inputHandler);
           setTimeout(() => {
             game.makeAIMove();
@@ -142,6 +187,11 @@ makeMove.addEventListener("click", () => {
   setTimeout(() => {
     game.makeAIMove();
     board.setPosition(game.getFEN(), true);
+    
+    // Play sound for AI move (from human perspective)
+    const evaluation = -game.evaluatePosition(); // Negate because it's from human's perspective
+    playSoundFeedback(evaluation);
+    
     board.enableMoveInput(inputHandler);
   }, 500);
   updateStatus();
@@ -192,6 +242,10 @@ function startAiVsAiMatch() {
     
     game.makeAIMove();
     board.setPosition(game.getFEN(), true);
+    
+    // Play sound for AI move in AI vs AI mode (neutral sound)
+    sounds.neutral.play();
+    
     updateStatus();
     
     // Schedule next move with a delay
@@ -219,3 +273,8 @@ function stopAiVsAiMatch() {
 // Add event listeners for AI vs AI buttons
 aiVsAi.addEventListener("click", startAiVsAiMatch);
 stopAiVsAi.addEventListener("click", stopAiVsAiMatch);
+
+// Add sound toggle event listener
+soundToggle.addEventListener("change", () => {
+  soundEnabled = soundToggle.checked;
+});

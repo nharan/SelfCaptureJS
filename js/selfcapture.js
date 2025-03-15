@@ -2383,6 +2383,12 @@ const engine = function () {
     SearchController.time = time * 1000;
   }
 
+  function evaluatePosition() {
+    // Return the evaluation of the current position
+    // Positive values are good for the side to move, negative values are bad
+    return EvalPosition() / 100; // Convert centipawns to pawns for easier thresholds
+  }
+
   /****************************\
    ============================
    
@@ -2399,5 +2405,6 @@ const engine = function () {
     reset: reset,
     gameStatus: gameStatus,
     setThinkingTime: setThinkingTime,
+    evaluatePosition: evaluatePosition
   };
 };
