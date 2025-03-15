@@ -1663,11 +1663,120 @@ const engine = function () {
     eg_phase = 24 - gamePhase;
 
     score = (mg_score * mg_phase + eg_score * eg_phase) / 24;
+    
+    // Evaluate the last move if it was a self-capture
+    if (GameBoard.hisPly > 0) {
+      const lastMove = GameBoard.history[GameBoard.hisPly-1].move;
+      if (lastMove !== NOMOVE) {
+        const from = fromSQ(lastMove);
+        const to = toSQ(lastMove);
+        
+        // Check if we have the piece information in history
+        if (GameBoard.history[GameBoard.hisPly-1].pieces) {
+          const piece = GameBoard.history[GameBoard.hisPly-1].pieces[from];
+          const captured = GameBoard.history[GameBoard.hisPly-1].pieces[to];
+          
+          // If it was a self-capture
+          if (piece !== PIECES.EMPTY && captured !== PIECES.EMPTY && 
+              PieceCol[piece] === PieceCol[captured]) {
+            
+            // If it was a good self-capture, don't penalize
+            if (isGoodSelfCapture(lastMove)) {
+              // No penalty for good self-captures
+            } else {
+              // Apply a penalty based on the value of the captured piece
+              const capturedValue = getPieceValue(captured);
+              const selfCapturePenalty = capturedValue * 0.5; // 50% of the piece value
+              
+              if (GameBoard.side === COLOURS.WHITE) {
+                score -= selfCapturePenalty;
+              } else {
+                score += selfCapturePenalty;
+              }
+            }
+          }
+        }
+      }
+    }
 
     if (GameBoard.side == COLOURS.WHITE) {
       return score;
     } else {
       return -score;
+    }
+  }
+
+  // Get the value of a piece for tactical evaluation
+  function getPieceValue(piece) {
+    if (PiecePawn[piece]) return 100;
+    if (PieceKnight[piece]) return 320;
+    if (PieceBishopQueen[piece] && !PieceRookQueen[piece]) return 330; // Bishop only
+    if (PieceRookQueen[piece] && !PieceBishopQueen[piece]) return 500; // Rook only
+    if (PieceBishopQueen[piece] && PieceRookQueen[piece]) return 900; // Queen
+    if (PieceKing[piece]) return 20000;
+    return 0;
+  }
+
+  // Evaluate if a self-capture is tactically beneficial
+  function isGoodSelfCapture(move) {
+    try {
+      const from = fromSQ(move);
+      const to = toSQ(move);
+      
+      // Safety checks
+      if (from < 0 || from >= BRD_SQ_NUM || to < 0 || to >= BRD_SQ_NUM) {
+        return false;
+      }
+      
+      const piece = GameBoard.pieces[from];
+      const captured = GameBoard.pieces[to];
+      
+      // More safety checks
+      if (piece === PIECES.EMPTY || captured === PIECES.EMPTY) {
+        return false;
+      }
+      
+      // Don't capture kings
+      if (PieceKing[captured]) {
+        return false;
+      }
+      
+      // If same color, it's a self-capture
+      if (PieceCol[piece] === PieceCol[captured]) {
+        // Evaluate if this self-capture is beneficial
+        
+        // Case 1: Capturing a less valuable piece with a more valuable one is usually bad
+        const capturingValue = getPieceValue(piece);
+        const capturedValue = getPieceValue(captured);
+        
+        // If capturing a more valuable piece, it's probably bad
+        if (capturingValue > capturedValue + 100) {
+          return false;
+        }
+        
+        // Case 2: Capturing a blocked pawn might be good
+        if (PiecePawn[captured]) {
+          // Check if pawn is blocked
+          const pawnDirection = (PieceCol[captured] === COLOURS.WHITE) ? 10 : -10;
+          const squareInFront = to + pawnDirection;
+          
+          // If square in front is occupied, pawn is blocked
+          if (!SQOFFBOARD(squareInFront) && GameBoard.pieces[squareInFront] !== PIECES.EMPTY) {
+            return true;
+          }
+        }
+        
+        // Case 3: Capturing a trapped piece might be good
+        if (PieceBishopQueen[captured] || PieceKnight[captured]) {
+          // For simplicity, assume it's good to capture these pieces
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      console.log("Error in isGoodSelfCapture:", e);
+      return false; // Default to false on error
     }
   }
 
@@ -1738,6 +1847,30 @@ const engine = function () {
       index < GameBoard.moveListStart[GameBoard.ply + 1];
       ++index
     ) {
+      // Check if this is a self-capture and if it's beneficial
+      try {
+        const move = GameBoard.moveList[index];
+        const from = fromSQ(move);
+        const to = toSQ(move);
+        
+        // Safety checks
+        if (from >= 0 && from < BRD_SQ_NUM && to >= 0 && to < BRD_SQ_NUM) {
+          const piece = GameBoard.pieces[from];
+          const captured = GameBoard.pieces[to];
+          
+          // If it's a self-capture, evaluate if it's good
+          if (piece !== PIECES.EMPTY && captured !== PIECES.EMPTY && 
+              PieceCol[piece] === PieceCol[captured]) {
+            if (isGoodSelfCapture(move)) {
+              // Boost the score for good self-captures
+              GameBoard.moveScores[index] += 50000;
+            }
+          }
+        }
+      } catch (e) {
+        console.log("Error checking self-capture:", e);
+      }
+      
       if (GameBoard.moveScores[index] > bestScore) {
         bestScore = GameBoard.moveScores[index];
         bestNum = index;
@@ -2052,7 +2185,8 @@ const engine = function () {
   }
 
   function getBestMove() {
-    SearchController.depth = MAXDEPTH;
+    // Use a reasonable search depth (4 is a good balance between speed and quality)
+    SearchController.depth = 4;
     SearchPosition();
     return SearchController.best;
   }
