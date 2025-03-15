@@ -392,6 +392,7 @@ const engine = function () {
 
   function ParseMove(from, to) {
     GenerateMoves();
+    console.log("ParseMove from:", from, "to:", to);
 
     var Move = NOMOVE;
     var PromPce = PIECES.EMPTY;
@@ -775,6 +776,10 @@ const engine = function () {
     var to = toSQ(move);
     var side = GameBoard.side;
 
+    if (CAPTURED(move) == Kings[side]) {
+      return false;
+    }
+
     GameBoard.history[GameBoard.hisPly].posKey = GameBoard.posKey;
 
     if ((move & MFLAGEP) != 0) {
@@ -1109,19 +1114,15 @@ const engine = function () {
             }
 
             if (isSqOffBoard(sq + 9) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq + 9] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq + 9]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq + 9]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq + 9] != PIECES.EMPTY) {
                     AddWhitePawnCaptureMove(sq, sq + 9, GameBoard.pieces[sq + 9]);
                 }
             }
 
             if (isSqOffBoard(sq + 11) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq + 11] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq + 11]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq + 11]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq + 11] != PIECES.EMPTY) {
                     AddWhitePawnCaptureMove(sq, sq + 11, GameBoard.pieces[sq + 11]);
                 }
             }
@@ -1181,19 +1182,15 @@ const engine = function () {
             }
 
             if (isSqOffBoard(sq - 9) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq - 9] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq - 9]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq - 9]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq - 9] != PIECES.EMPTY) {
                     AddBlackPawnCaptureMove(sq, sq - 9, GameBoard.pieces[sq - 9]);
                 }
             }
 
             if (isSqOffBoard(sq - 11) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq - 11] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq - 11]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq - 11]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq - 11] != PIECES.EMPTY) {
                     AddBlackPawnCaptureMove(sq, sq - 11, GameBoard.pieces[sq - 11]);
                 }
             }
@@ -1258,9 +1255,8 @@ const engine = function () {
                 }
 
                 if (GameBoard.pieces[t_sq] != PIECES.EMPTY) {
-                    // Allow capturing any piece except own king
-                    if (PieceCol[GameBoard.pieces[t_sq]] != GameBoard.side || 
-                        !PieceKing[GameBoard.pieces[t_sq]]) {
+                    // Allow capturing any piece except kings
+                    if (!PieceKing[GameBoard.pieces[t_sq]]) {
                         AddCaptureMove(MOVE(sq, t_sq, GameBoard.pieces[t_sq], PIECES.EMPTY, 0));
                     }
                 } else {
@@ -1284,9 +1280,8 @@ const engine = function () {
 
                 while (isSqOffBoard(t_sq) == false) {
                     if (GameBoard.pieces[t_sq] != PIECES.EMPTY) {
-                        // Allow capturing any piece except own king
-                        if (PieceCol[GameBoard.pieces[t_sq]] != GameBoard.side || 
-                            !PieceKing[GameBoard.pieces[t_sq]]) {
+                        // Allow capturing any piece except kings
+                        if (!PieceKing[GameBoard.pieces[t_sq]]) {
                             AddCaptureMove(MOVE(sq, t_sq, GameBoard.pieces[t_sq], PIECES.EMPTY, 0));
                         }
                         break;
@@ -1318,19 +1313,15 @@ const engine = function () {
             sq = GameBoard.pList[getPieceIndex(pceType, pceNum)];
 
             if (isSqOffBoard(sq + 9) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq + 9] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq + 9]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq + 9]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq + 9] != PIECES.EMPTY) {
                     AddWhitePawnCaptureMove(sq, sq + 9, GameBoard.pieces[sq + 9]);
                 }
             }
 
             if (isSqOffBoard(sq + 11) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq + 11] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq + 11]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq + 11]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq + 11] != PIECES.EMPTY) {
                     AddWhitePawnCaptureMove(sq, sq + 11, GameBoard.pieces[sq + 11]);
                 }
             }
@@ -1352,19 +1343,15 @@ const engine = function () {
             sq = GameBoard.pList[getPieceIndex(pceType, pceNum)];
 
             if (isSqOffBoard(sq - 9) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq - 9] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq - 9]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq - 9]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq - 9] != PIECES.EMPTY) {
                     AddBlackPawnCaptureMove(sq, sq - 9, GameBoard.pieces[sq - 9]);
                 }
             }
 
             if (isSqOffBoard(sq - 11) == false) {
-                // Allow capturing any piece except own king
-                if (GameBoard.pieces[sq - 11] != PIECES.EMPTY && 
-                    (PieceCol[GameBoard.pieces[sq - 11]] != GameBoard.side || 
-                    !PieceKing[GameBoard.pieces[sq - 11]])) {
+                // Allow capturing any piece except kings
+                if (GameBoard.pieces[sq - 11] != PIECES.EMPTY) {
                     AddBlackPawnCaptureMove(sq, sq - 11, GameBoard.pieces[sq - 11]);
                 }
             }
@@ -1397,9 +1384,8 @@ const engine = function () {
                 }
 
                 if (GameBoard.pieces[t_sq] != PIECES.EMPTY) {
-                    // Allow capturing any piece except own king
-                    if (PieceCol[GameBoard.pieces[t_sq]] != GameBoard.side || 
-                        !PieceKing[GameBoard.pieces[t_sq]]) {
+                    // Allow capturing any piece except kings
+                    if (!PieceKing[GameBoard.pieces[t_sq]]) {
                         AddCaptureMove(MOVE(sq, t_sq, GameBoard.pieces[t_sq], PIECES.EMPTY, 0));
                     }
                 }
@@ -1421,9 +1407,8 @@ const engine = function () {
 
                 while (isSqOffBoard(t_sq) == false) {
                     if (GameBoard.pieces[t_sq] != PIECES.EMPTY) {
-                        // Allow capturing any piece except own king
-                        if (PieceCol[GameBoard.pieces[t_sq]] != GameBoard.side || 
-                            !PieceKing[GameBoard.pieces[t_sq]]) {
+                        // Allow capturing any piece except kings
+                        if (!PieceKing[GameBoard.pieces[t_sq]]) {
                             AddCaptureMove(MOVE(sq, t_sq, GameBoard.pieces[t_sq], PIECES.EMPTY, 0));
                         }
                         break;

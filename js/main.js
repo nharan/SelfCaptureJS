@@ -27,40 +27,73 @@ const board = new Chessboard(document.getElementById("board"), {
   position: game.getFEN(),
   sprite: { url: "../assets/images/chessboard-sprite-staunty.svg" },
   animationDuration: 200,
+  style: {
+    moveFromMarker: MARKER_TYPE.frame,
+    moveToMarker: MARKER_TYPE.frame,
+  }
 });
 
 updateStatus();
 
-board.enableMoveInput(inputHandler);
+// Track if we have a piece selected
+let selectedPiece = null;
 
-// IO functions
+board.enableMoveInput(inputHandler);
 
 function inputHandler(event) {
   event.chessboard.removeMarkers(MARKER_TYPE.dot);
   if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
-    const moves = game.getMovesAtSquare(event.square);
-    for (const move of moves) {
-      // draw dots on possible squares
-      event.chessboard.addMarker(MARKER_TYPE.dot, move);
+    // If we already have a piece selected
+    if (selectedPiece) {
+      // Check if this is a valid destination
+      const moves = game.getMovesAtSquare(selectedPiece);
+      if (moves.includes(event.square)) {
+        // This is a valid move destination
+        const result = game.move(selectedPiece, event.square);
+        if (result) {
+          selectedPiece = null;
+          event.chessboard.disableMoveInput();
+          event.chessboard.state.moveInputProcess.then(() => {
+            event.chessboard.setPosition(game.getFEN(), true).then(() => {
+              event.chessboard.enableMoveInput(inputHandler);
+              setTimeout(() => {
+                game.makeAIMove();
+                event.chessboard.setPosition(game.getFEN(), true);
+                setTimeout(() => updateStatus(), 300);
+              }, 500);
+            });
+          });
+        }
+        return false;
+      }
     }
-    return moves.length > 0;
+    
+    // No piece selected or invalid destination - try to select a new piece
+    const moves = game.getMovesAtSquare(event.square);
+    if (moves.length > 0) {
+      selectedPiece = event.square;
+      for (const move of moves) {
+        event.chessboard.addMarker(MARKER_TYPE.dot, move);
+      }
+      return true;
+    }
+    selectedPiece = null;
+    return false;
   } else if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
     const result = game.move(event.squareFrom, event.squareTo);
+    selectedPiece = null;
     if (result) {
       event.chessboard.disableMoveInput();
-      this.chessboard.state.moveInputProcess.then(() => {
-        // wait for the move input process has finished
-        this.chessboard.setPosition(game.getFEN(), true).then(() => {
+      event.chessboard.state.moveInputProcess.then(() => {
+        event.chessboard.setPosition(game.getFEN(), true).then(() => {
           event.chessboard.enableMoveInput(inputHandler);
           setTimeout(() => {
             game.makeAIMove();
-            this.chessboard.setPosition(game.getFEN(), true);
+            event.chessboard.setPosition(game.getFEN(), true);
             setTimeout(() => updateStatus(), 300);
           }, 500);
         });
       });
-    } else {
-      console.warn("invalid move");
     }
     return result;
   }
