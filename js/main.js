@@ -18,6 +18,13 @@ const flipBoard = document.getElementById("flipBoard");
 const aiMove = document.getElementById("aiMove");
 const uiState = document.getElementById("uiState");
 const thinkingTime = document.getElementById("thinkingTime");
+// Add AI vs AI button
+const aiVsAi = document.getElementById("aiVsAi");
+// Add stop AI vs AI button
+const stopAiVsAi = document.getElementById("stopAiVsAi");
+
+// Flag to track if AI vs AI match is running
+let aiVsAiRunning = false;
 
 // initialise engine
 var game = new engine();
@@ -111,6 +118,7 @@ function updateStatus() {
   if (status.over) {
     game_over = true;
     board.disableMoveInput();
+    aiVsAiRunning = false; // Stop AI vs AI match if running
     alert(status.over);
     uiState.innerHTML = `${status.over}!`;
     return false;
@@ -128,8 +136,11 @@ function updateStatus() {
 reset.addEventListener("click", () => {
   if (window.confirm("Are you sure you want to reset the board?")) {
     game.reset();
+    game_over = false;
+    aiVsAiRunning = false; // Stop AI vs AI match if running
     board.enableMoveInput(inputHandler);
     board.setPosition(game.getFEN(), true);
+    updateStatus();
   }
 });
 
@@ -172,3 +183,49 @@ setFEN.addEventListener("click", () => {
 thinkingTime.addEventListener("change", () => {
   game.setThinkingTime(thinkingTime.value);
 });
+
+// AI vs AI match function
+function startAiVsAiMatch() {
+  if (game_over) return;
+  
+  aiVsAiRunning = true;
+  board.disableMoveInput();
+  
+  // Make a move and schedule the next one
+  function makeAiMove() {
+    if (!aiVsAiRunning || game_over) {
+      if (!game_over) {
+        board.enableMoveInput(inputHandler);
+      }
+      return;
+    }
+    
+    game.makeAIMove();
+    board.setPosition(game.getFEN(), true);
+    updateStatus();
+    
+    // Schedule next move with a delay
+    setTimeout(() => {
+      if (aiVsAiRunning && !game_over) {
+        makeAiMove();
+      } else if (!game_over) {
+        board.enableMoveInput(inputHandler);
+      }
+    }, 1000); // 1 second delay between moves
+  }
+  
+  // Start the AI vs AI match
+  makeAiMove();
+}
+
+// Stop AI vs AI match
+function stopAiVsAiMatch() {
+  aiVsAiRunning = false;
+  if (!game_over) {
+    board.enableMoveInput(inputHandler);
+  }
+}
+
+// Add event listeners for AI vs AI buttons
+aiVsAi.addEventListener("click", startAiVsAiMatch);
+stopAiVsAi.addEventListener("click", stopAiVsAiMatch);
