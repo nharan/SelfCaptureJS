@@ -392,7 +392,6 @@ const engine = function () {
 
   function ParseMove(from, to) {
     GenerateMoves();
-    console.log("ParseMove from:", from, "to:", to);
 
     var Move = NOMOVE;
     var PromPce = PIECES.EMPTY;
