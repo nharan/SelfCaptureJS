@@ -1634,8 +1634,6 @@ const engine = function () {
 
   function EvalPosition() {
     let gamePhase = 0;
-    // var score =
-    //   GameBoard.material[COLOURS.WHITE] - GameBoard.material[COLOURS.BLACK];
 
     let mg_score = 0;
     let eg_score = 0;
@@ -1644,14 +1642,12 @@ const engine = function () {
       for (pceNum = 0; pceNum < GameBoard.pceNum[PIECES[pce]]; pceNum++) {
         sq = GameBoard.pList[getPieceIndex(PIECES[pce], pceNum)];
         if (pce[0] == "w") {
-          // score += table[pce][sq120to64(sq)];
           mg_score +=
             mg_value[pce] + mg_pesto_table[pce][mirror64(sq120to64(sq))];
           eg_score +=
             eg_value[pce] + eg_pesto_table[pce][mirror64(sq120to64(sq))];
           gamePhase += gamephaseInc[pce];
         } else {
-          // score -= table[pce][(mirror64(sq120to64(sq)))];
           mg_score -= mg_value[pce] + mg_pesto_table[pce][sq120to64(sq)];
           eg_score -= eg_value[pce] + eg_pesto_table[pce][sq120to64(sq)];
           gamePhase += gamephaseInc[pce];
@@ -1662,44 +1658,55 @@ const engine = function () {
     mg_phase = gamePhase;
     eg_phase = 24 - gamePhase;
 
-    score = (mg_score * mg_phase + eg_score * eg_phase) / 24;
+    let score = (mg_score * mg_phase + eg_score * eg_phase) / 24;
     
-    // Evaluate the last move if it was a self-capture
-    if (GameBoard.hisPly > 0) {
-      const lastMove = GameBoard.history[GameBoard.hisPly-1].move;
-      if (lastMove !== NOMOVE) {
-        const from = fromSQ(lastMove);
-        const to = toSQ(lastMove);
+    // ===== Self-Capture Strategic Planning =====
+    // Award potential good self-captures for the side to move
+    const side = GameBoard.side;
+    
+    // Look for potential good self-captures
+    GenerateMoves();
+    let selfCaptureOpportunities = 0;
+    
+    for (let moveNum = GameBoard.moveListStart[GameBoard.ply]; 
+         moveNum < GameBoard.moveListStart[GameBoard.ply + 1]; ++moveNum) {
+      const move = GameBoard.moveList[moveNum];
+      const from = fromSQ(move);
+      const to = toSQ(move);
+      
+      if (from >= 0 && from < BRD_SQ_NUM && to >= 0 && to < BRD_SQ_NUM) {
+        const piece = GameBoard.pieces[from];
+        const target = GameBoard.pieces[to];
         
-        // Check if we have the piece information in history
-        if (GameBoard.history[GameBoard.hisPly-1].pieces) {
-          const piece = GameBoard.history[GameBoard.hisPly-1].pieces[from];
-          const captured = GameBoard.history[GameBoard.hisPly-1].pieces[to];
+        // Check if it's a self-capture
+        if (piece !== PIECES.EMPTY && target !== PIECES.EMPTY && 
+            PieceCol[piece] === PieceCol[target] && PieceCol[piece] === side) {
           
-          // If it was a self-capture
-          if (piece !== PIECES.EMPTY && captured !== PIECES.EMPTY && 
-              PieceCol[piece] === PieceCol[captured]) {
+          // Check if it's a good self-capture
+          if (isGoodSelfCapture(move)) {
+            selfCaptureOpportunities++;
             
-            // If it was a good self-capture, don't penalize
-            if (isGoodSelfCapture(lastMove)) {
-              // No penalty for good self-captures
+            // Bonus for having good self-capture opportunities
+            if (side === COLOURS.WHITE) {
+              score += 15; // Small bonus for each good self-capture opportunity
             } else {
-              // Apply a penalty based on the value of the captured piece
-              const capturedValue = getPieceValue(captured);
-              const selfCapturePenalty = capturedValue * 0.5; // 50% of the piece value
-              
-              if (GameBoard.side === COLOURS.WHITE) {
-                score -= selfCapturePenalty;
-              } else {
-                score += selfCapturePenalty;
-              }
+              score -= 15; // Small bonus for each good self-capture opportunity
             }
           }
         }
       }
     }
-
-    if (GameBoard.side == COLOURS.WHITE) {
+    
+    // Bonus for having multiple self-capture options (tactical flexibility)
+    if (selfCaptureOpportunities > 1) {
+      if (side === COLOURS.WHITE) {
+        score += 15 * (selfCaptureOpportunities - 1);
+      } else {
+        score -= 15 * (selfCaptureOpportunities - 1);
+      }
+    }
+    
+    if (GameBoard.side === COLOURS.WHITE) {
       return score;
     } else {
       return -score;
@@ -1745,16 +1752,17 @@ const engine = function () {
       if (PieceCol[piece] === PieceCol[captured]) {
         // Evaluate if this self-capture is beneficial
         
-        // Case 1: Capturing a less valuable piece with a more valuable one is usually bad
+        // Get piece values
         const capturingValue = getPieceValue(piece);
         const capturedValue = getPieceValue(captured);
         
-        // If capturing a more valuable piece, it's probably bad
-        if (capturingValue > capturedValue + 100) {
+        // Case 1: Don't sacrifice much more valuable pieces
+        // Allow some tactical sacrifices but avoid extreme value differences
+        if (capturingValue > capturedValue + 150) {
           return false;
         }
         
-        // Case 2: Capturing a blocked pawn might be good
+        // Case 2: Capturing a blocked pawn is often good
         if (PiecePawn[captured]) {
           // Check if pawn is blocked
           const pawnDirection = (PieceCol[captured] === COLOURS.WHITE) ? 10 : -10;
@@ -1766,11 +1774,13 @@ const engine = function () {
           }
         }
         
-        // Case 3: Capturing a trapped piece might be good
-        if (PieceBishopQueen[captured] || PieceKnight[captured]) {
-          // For simplicity, assume it's good to capture these pieces
+        // Case 3: Capturing with a less valuable piece is usually good
+        if (capturingValue < capturedValue - 50) {
           return true;
         }
+        
+        // Default: be conservative with self-captures
+        return false;
       }
       
       return false;
