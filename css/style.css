@@ -145,4 +145,16 @@
 /* Also apply opacity to any SVG elements within the source square */
 .peek-source-square svg * {
   opacity: 0.3 !important;
+}
+
+/* Self-capture highlight styling */
+.cm-chessboard .square.self-capture-highlight {
+  fill: rgba(255, 0, 0, 0.5) !important;
+  filter: drop-shadow(0 0 3px rgba(255, 0, 0, 0.7)) !important;
+  animation: self-capture-pulse 1s infinite alternate !important;
+}
+
+@keyframes self-capture-pulse {
+  from { fill: rgba(255, 0, 0, 0.4) !important; }
+  to { fill: rgba(255, 0, 0, 0.6) !important; }
 } 

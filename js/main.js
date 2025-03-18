@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Mouse move listener to highlight potential self-captures
   document.addEventListener('mousemove', (e) => {
-    // Only process if Peek is enabled or we need to highlight self-captures
+    // Only process if a piece is being dragged
     if (!dragSourceSquare) return;
     
     // Get the draggable piece reference just once
@@ -515,35 +515,49 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!elemBelow) return;
     
     // Check if we're over a board square and it's not the source square
-    if (!elemBelow.classList.contains('square')) return;
-    
-    const targetSquare = elemBelow.getAttribute('data-square');
-    if (!targetSquare || targetSquare === dragSourceSquare) return;
-    
-    // Handle self-capture highlighting (only when needed)
-    if (elemBelow.querySelector('.piece')) {
-      const position = game.getFEN().split(' ')[0];
-      const sourcePiece = getPieceAtSquare(position, dragSourceSquare);
-      const targetPiece = getPieceAtSquare(position, targetSquare);
-      
-      // Clear any previous self-capture highlights
+    if (!elemBelow.classList.contains('square')) {
+      // If not over a square, clear any previous highlights
       document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
         sq.classList.remove('self-capture-highlight');
       });
+      return;
+    }
+    
+    const targetSquare = elemBelow.getAttribute('data-square');
+    if (!targetSquare || targetSquare === dragSourceSquare) {
+      // If over the source square, clear any previous highlights
+      document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
+        sq.classList.remove('self-capture-highlight');
+      });
+      return;
+    }
+    
+    // Always check for self-capture highlighting regardless of Peek mode
+    // Clear any previous self-capture highlights first
+    document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
+      sq.classList.remove('self-capture-highlight');
+    });
+    
+    // Get the current board position and check pieces
+    const position = game.getFEN().split(' ')[0];
+    const sourcePiece = getPieceAtSquare(position, dragSourceSquare);
+    const targetPiece = getPieceAtSquare(position, targetSquare);
+    
+    // If there's a piece at the target, check if it's the same color for self-capture
+    if (sourcePiece && targetPiece) {
+      const sourceIsWhite = sourcePiece === sourcePiece.toUpperCase();
+      const targetIsWhite = targetPiece === targetPiece.toUpperCase();
       
-      if (sourcePiece && targetPiece) {
-        // Check if same color
-        const sourceIsWhite = sourcePiece === sourcePiece.toUpperCase();
-        const targetIsWhite = targetPiece === targetPiece.toUpperCase();
+      if (sourceIsWhite === targetIsWhite) {
+        // Add highlight for potential self-capture - this is always shown whether peek is on or not
+        elemBelow.classList.add('self-capture-highlight');
         
-        if (sourceIsWhite === targetIsWhite) {
-          // Add highlight for potential self-capture
-          elemBelow.classList.add('self-capture-highlight');
-        }
+        // Add a data attribute to mark this as a self-capture option
+        elemBelow.setAttribute('data-self-capture', 'true');
       }
     }
     
-    // Peek mode functionality - only process if enabled
+    // Only continue with Peek functionality if Peek mode is enabled
     if (!peekModeEnabled) return;
     
     // Check if this is a legal move
@@ -588,12 +602,16 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Clear highlights when drag ends
   document.addEventListener('mouseup', () => {
+    // Clear drag source tracking
     dragSourceSquare = null;
+    
+    // Always clear any self-capture highlights when dragging ends
     document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
       sq.classList.remove('self-capture-highlight');
+      sq.removeAttribute('data-self-capture');
     });
     
-    // Clear any peek arrows and state
+    // Only clean up Peek-related stuff if Peek mode is enabled
     if (peekModeEnabled) {
       // Clear calculation state
       isPeekCalculating = false;
