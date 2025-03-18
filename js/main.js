@@ -1,4 +1,5 @@
 import { Chessboard, MARKER_TYPE, INPUT_EVENT_TYPE, COLOR } from "../cm-chessboard/Chessboard.js";
+import { Arrows, ARROW_TYPE } from "../cm-chessboard/extensions/arrows/Arrows.js";
 
 var game_over = false;
 
@@ -17,6 +18,8 @@ const soundToggle = document.getElementById("soundToggle");
 const aiVsAi = document.getElementById("aiVsAi");
 // Add stop AI vs AI button
 const stopAiVsAi = document.getElementById("stopAiVsAi");
+// Add Peek button
+const peekButton = document.getElementById("peekButton");
 
 // Flag to track if AI vs AI match is running
 let aiVsAiRunning = false;
@@ -98,6 +101,48 @@ const board = new Chessboard(document.getElementById("board"), {
     moveToMarker: MARKER_TYPE.frame,
   }
 });
+
+// Initialize the Arrows extension for Peek mode
+const arrows = new Arrows(board, {
+  sprite: {
+    url: "./assets/images/chessboard-arrows.svg",
+    size: 40,
+    cache: true
+  }
+});
+
+// Add custom styling for arrows directly to ensure visibility
+const arrowsStyle = document.createElement('style');
+arrowsStyle.textContent = `
+  .cm-chessboard .arrow-default .arrow-head, 
+  .cm-chessboard .arrow-danger .arrow-head {
+    fill-opacity: 1 !important;
+  }
+  
+  .cm-chessboard .arrow-default .arrow-line,
+  .cm-chessboard .arrow-danger .arrow-line {
+    stroke-width: 6px !important;
+    visibility: visible !important;
+    opacity: 0.85 !important;
+  }
+  
+  .cm-chessboard .arrow-default .arrow-head {
+    fill: blue !important;
+  }
+  
+  .cm-chessboard .arrow-default .arrow-line {
+    stroke: blue !important;
+  }
+`;
+document.head.appendChild(arrowsStyle);
+
+// Peek mode variables
+let peekModeEnabled = false;
+let currentPeekArrow = null;
+let lastHoveredSquare = null;
+let lastPeekCalculationTime = null;
+let isPeekCalculating = false;
+const PEEK_THROTTLE_DELAY = 100; // ms - how often to calculate peek results at most
 
 // Add CSS for self-capture highlight
 const selfCaptureStyle = document.createElement('style');
@@ -489,6 +534,51 @@ document.addEventListener('DOMContentLoaded', () => {
             elemBelow.classList.add('self-capture-highlight');
           }
         }
+        
+        // Peek mode functionality
+        if (peekModeEnabled) {
+          // Only process if this is a different square than last time
+          if (targetSquare !== lastHoveredSquare) {
+            // If we're switching to a new target square, clear any previous peek visualizations first
+            if (lastHoveredSquare !== null) {
+              // Clear any existing visualizations completely before showing new ones
+              clearPeekVisualizations();
+            }
+            
+            // Update the last hovered square
+            lastHoveredSquare = targetSquare;
+            
+            // Check if this is a legal move
+            const moves = game.getMovesAtSquare(dragSourceSquare);
+            if (moves && moves.includes(targetSquare)) {
+              // Use a timestamp-based throttling approach instead of debouncing
+              const now = Date.now();
+              if (!lastPeekCalculationTime || (now - lastPeekCalculationTime) > PEEK_THROTTLE_DELAY) {
+                lastPeekCalculationTime = now;
+                
+                // Clear any ongoing peek calculation
+                if (isPeekCalculating) {
+                  return; // Skip if we're already calculating
+                }
+                
+                // Clear previous arrow
+                if (currentPeekArrow) {
+                  arrows.removeArrows();
+                  currentPeekArrow = null;
+                }
+                
+                // Indicate we're calculating
+                isPeekCalculating = true;
+                
+                // Use requestAnimationFrame for better performance
+                requestAnimationFrame(() => {
+                  simulateMoveAndShowResponse(dragSourceSquare, targetSquare);
+                  isPeekCalculating = false;
+                });
+              }
+            }
+          }
+        }
       }
     }
   });
@@ -499,6 +589,30 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
       sq.classList.remove('self-capture-highlight');
     });
+    
+    // Clear any peek arrows and state
+    if (peekModeEnabled) {
+      // Clear calculation state
+      isPeekCalculating = false;
+      lastPeekCalculationTime = null;
+      
+      // Remove any visualizations
+      clearPeekVisualizations();
+      
+      // Ensure all opacity effects are completely gone
+      resetChessPieceOpacity();
+      
+      // Reset peek state
+      currentPeekArrow = null;
+      
+      // Reset hover state
+      lastHoveredSquare = null;
+      
+      // Ensure all pieces are fully visible
+      document.querySelectorAll('.cm-chessboard .piece').forEach(piece => {
+        piece.style.opacity = '';
+      });
+    }
   });
 });
 
@@ -660,6 +774,54 @@ stopAiVsAi.addEventListener("click", stopAiVsAiMatch);
 // Add sound toggle event listener
 soundToggle.addEventListener("change", () => {
   soundEnabled = soundToggle.checked;
+});
+
+// Add Peek button event listener
+peekButton.addEventListener("click", () => {
+  peekModeEnabled = !peekModeEnabled;
+  
+  // Update button appearance
+  if (peekModeEnabled) {
+    peekButton.classList.add("peek-active");
+    peekButton.innerHTML = "👁️ Peek [ON]";
+    // Also show a notification
+    const notification = document.createElement('div');
+    notification.style.position = 'fixed';
+    notification.style.top = '10px';
+    notification.style.left = '50%';
+    notification.style.transform = 'translateX(-50%)';
+    notification.style.backgroundColor = '#007bff';
+    notification.style.color = 'white';
+    notification.style.padding = '10px 20px';
+    notification.style.borderRadius = '5px';
+    notification.style.zIndex = '9999';
+    notification.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+    notification.textContent = 'Peek Mode Activated';
+    document.body.appendChild(notification);
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transition = 'opacity 1s ease';
+      setTimeout(() => document.body.removeChild(notification), 1000);
+    }, 2000);
+  } else {
+    peekButton.classList.remove("peek-active");
+    peekButton.innerHTML = "👁️ Peek";
+    
+    // Clear any peek calculation state when disabling
+    isPeekCalculating = false;
+    lastPeekCalculationTime = null;
+    
+    // Clear any existing visualizations
+    clearPeekVisualizations();
+    
+    // Reset peek state
+    currentPeekArrow = null;
+    
+    // Reset state
+    lastHoveredSquare = null;
+  }
+  
+  console.log("Peek mode " + (peekModeEnabled ? "enabled" : "disabled"));
 });
 
 // Function to create a visual flash effect on a square when a capture occurs
@@ -974,4 +1136,565 @@ function downloadBoardImage() {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+// Function to detect actual piece movement between two board positions
+function detectActualMove(beforeFEN, afterFEN) {
+  // Split the FENs and get only the piece positions
+  const beforePosition = beforeFEN.split(' ')[0];
+  const afterPosition = afterFEN.split(' ')[0];
+  
+  // If the positions are the same, no move was made
+  if (beforePosition === afterPosition) {
+    return null;
+  }
+  
+  // Convert FEN rows to a 2D board representation
+  const beforeBoard = fenToBoard(beforePosition);
+  const afterBoard = fenToBoard(afterPosition);
+  
+  // Find differences - where pieces disappeared and appeared
+  let fromSquare = null;
+  let toSquare = null;
+  
+  // Check each square on the board
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      // Convert to algebraic notation (a1, h8, etc.)
+      const square = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row);
+      
+      // If a piece disappeared from this square
+      if (beforeBoard[row][col] && (!afterBoard[row][col] || beforeBoard[row][col] !== afterBoard[row][col])) {
+        // This could be the 'from' square
+        if (!fromSquare || !toSquare) { // Prioritize first difference found
+          fromSquare = square;
+        }
+      }
+      
+      // If a piece appeared on this square or changed
+      if ((!beforeBoard[row][col] && afterBoard[row][col]) || 
+          (beforeBoard[row][col] && afterBoard[row][col] && beforeBoard[row][col] !== afterBoard[row][col])) {
+        // This could be the 'to' square
+        toSquare = square;
+      }
+    }
+  }
+  
+  if (fromSquare && toSquare) {
+    return {
+      from: fromSquare,
+      to: toSquare,
+      // The piece that moved
+      piece: beforeBoard[8 - parseInt(fromSquare.charAt(1))][fromSquare.charCodeAt(0) - 'a'.charCodeAt(0)]
+    };
+  }
+  
+  return null;
+}
+
+// Convert FEN position string to a 2D board representation
+function fenToBoard(fenPosition) {
+  const rows = fenPosition.split('/');
+  const board = Array(8).fill().map(() => Array(8).fill(null));
+  
+  for (let row = 0; row < 8; row++) {
+    let col = 0;
+    for (let i = 0; i < rows[row].length; i++) {
+      const char = rows[row].charAt(i);
+      
+      if (isNaN(char)) {
+        // It's a piece
+        board[row][col] = char;
+        col++;
+      } else {
+        // It's a number - skip these many columns
+        col += parseInt(char);
+      }
+    }
+  }
+  
+  return board;
+}
+
+// Function to simulate a move and show the AI's response
+function simulateMoveAndShowResponse(fromSquare, toSquare) {
+  // Save the current game state
+  const currentFEN = game.getFEN();
+  
+  // Clear any existing visualizations
+  clearPeekVisualizations();
+  
+  // Reset opacity of all pieces to ensure we don't have leftover transparency
+  resetChessPieceOpacity();
+  
+  // Store the current peek state (do this first so it's available to ghost piece function)
+  currentPeekArrow = { 
+    playerFrom: fromSquare, 
+    playerTo: toSquare 
+  };
+  
+  // Get the piece at the source square
+  const position = game.getFEN().split(' ')[0];
+  const sourcePiece = getPieceAtSquare(position, fromSquare);
+  
+  if (sourcePiece) {
+    // Update the peek state with the source piece
+    currentPeekArrow.playerPiece = sourcePiece;
+    
+    // Show a ghost of the player's piece at the destination
+    showGhostPiece(sourcePiece, toSquare, 'player');
+    
+    // Try to make the move
+    const moveResult = game.move(fromSquare, toSquare);
+    
+    if (moveResult) {
+      // Log the position after player's move
+      const afterPlayerMoveFEN = game.getFEN();
+      
+      // If move is valid, calculate AI's response
+      const aiMoveResult = game.makeAIMove();
+      
+      // Get the position after AI's move
+      const afterAIMoveFEN = game.getFEN();
+      
+      if (aiMoveResult) {
+        // Use our detection function to find the actual squares that changed
+        const actualMove = detectActualMove(afterPlayerMoveFEN, afterAIMoveFEN);
+        
+        // Restore the original position
+        game.setFEN(currentFEN);
+        
+        if (actualMove) {
+          const aiFromSquare = actualMove.from;
+          const aiToSquare = actualMove.to;
+          
+          // Get the AI piece that would move
+          const aiPiece = getPieceAtSquare(afterPlayerMoveFEN, aiFromSquare);
+          
+          if (aiPiece) {
+            // Update the peek state with AI move information
+            currentPeekArrow.aiFrom = aiFromSquare;
+            currentPeekArrow.aiTo = aiToSquare;
+            currentPeekArrow.aiPiece = aiPiece;
+            
+            // Show a ghost of the AI's piece at its destination
+            showGhostPiece(aiPiece, aiToSquare, 'ai');
+          }
+        } else {
+          // Fallback method if detection fails
+          let aiFromSquare, aiToSquare, aiPiece;
+          
+          // Handle castling
+          if (aiMoveResult === "O-O" || aiMoveResult === "O-O-O") {
+            // For castling, we need to determine the squares based on the side to move
+            const side = afterPlayerMoveFEN.split(' ')[1]; // 'w' or 'b'
+            
+            if (side === 'w') {
+              aiFromSquare = 'e1';
+              aiToSquare = aiMoveResult === "O-O" ? 'g1' : 'c1';
+              aiPiece = 'K'; // White king
+            } else {
+              aiFromSquare = 'e8';
+              aiToSquare = aiMoveResult === "O-O" ? 'g8' : 'c8';
+              aiPiece = 'k'; // Black king
+            }
+            
+            // Update the peek state
+            currentPeekArrow.aiFrom = aiFromSquare;
+            currentPeekArrow.aiTo = aiToSquare;
+            currentPeekArrow.aiPiece = aiPiece;
+            currentPeekArrow.isCastling = true;
+            
+            // Show a ghost of the AI's king at its destination
+            showGhostPiece(aiPiece, aiToSquare, 'ai');
+            
+            // Also show rook movement for castling
+            const rookFromSquare = aiMoveResult === "O-O" ? 
+              (side === 'w' ? 'h1' : 'h8') : 
+              (side === 'w' ? 'a1' : 'a8');
+            const rookToSquare = aiMoveResult === "O-O" ? 
+              (side === 'w' ? 'f1' : 'f8') : 
+              (side === 'w' ? 'd1' : 'd8');
+            const rookPiece = side === 'w' ? 'R' : 'r';
+            
+            // Update the peek state with rook info
+            currentPeekArrow.aiRookFrom = rookFromSquare;
+            currentPeekArrow.aiRookTo = rookToSquare;
+            currentPeekArrow.aiRookPiece = rookPiece;
+            
+            // Show ghost of the rook
+            showGhostPiece(rookPiece, rookToSquare, 'ai-secondary');
+          } else {
+            // Handle normal moves and captures
+            const movePattern = /([a-h][1-8])([-x])([a-h][1-8])/;
+            const match = aiMoveResult.match(movePattern);
+            
+            if (match && match.length === 4) {
+              aiFromSquare = match[1];
+              aiToSquare = match[3];
+              
+              // Get the AI piece that would move
+              aiPiece = getPieceAtSquare(afterPlayerMoveFEN, aiFromSquare);
+              
+              if (aiPiece) {
+                // Update the peek state
+                currentPeekArrow.aiFrom = aiFromSquare;
+                currentPeekArrow.aiTo = aiToSquare;
+                currentPeekArrow.aiPiece = aiPiece;
+                
+                // Show a ghost of the AI's piece at its destination
+                showGhostPiece(aiPiece, aiToSquare, 'ai');
+              }
+            }
+          }
+        }
+      } else {
+        // Restore the original position
+        game.setFEN(currentFEN);
+      }
+    } else {
+      // Invalid move, clear any visualizations
+      clearPeekVisualizations();
+    }
+  }
+}
+
+// Function to show a ghost piece at a specific square
+function showGhostPiece(piece, square, type = 'player') {
+  // Find the target square
+  const targetSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${square}"]`);
+  if (!targetSquare) return;
+  
+  // Get the board size and calculate the piece size
+  const boardEl = document.getElementById('board');
+  const boardSize = boardEl.getBoundingClientRect().width;
+  const squareSize = boardSize / 8;
+  
+  // Create a ghost piece element
+  const ghostPiece = document.createElement('div');
+  ghostPiece.className = `peek-ghost-piece peek-${type}`;
+  ghostPiece.setAttribute('data-piece', piece);
+  ghostPiece.setAttribute('data-square', square);
+  
+  // Determine the class for the specific piece
+  const pieceClass = piece.toUpperCase() === piece ? 'w' : 'b';
+  const pieceType = piece.toLowerCase();
+  
+  // Set the styling
+  ghostPiece.style.position = 'absolute';
+  ghostPiece.style.width = `${squareSize}px`;
+  ghostPiece.style.height = `${squareSize}px`;
+  ghostPiece.style.opacity = type === 'player' ? '0.9' : '0.85';
+  ghostPiece.style.zIndex = '100'; // Ensure it's above other elements
+  ghostPiece.style.pointerEvents = 'none'; // Ensure it doesn't interfere with clicking
+  
+  // Different border colors for player vs AI ghosts
+  const borderColor = type === 'player' ? '#3498db' : '#e74c3c';
+  const glowColor = type === 'player' ? 'rgba(52, 152, 219, 0.6)' : 'rgba(231, 76, 60, 0.6)';
+  
+  // Add a subtle border and shadow for the ghost piece
+  ghostPiece.style.border = `2px solid ${borderColor}`;
+  ghostPiece.style.boxShadow = `0 0 10px ${glowColor}`;
+  ghostPiece.style.borderRadius = '50%';
+  
+  // Calculate the position of the square
+  const squareRect = targetSquare.getBoundingClientRect();
+  const boardRect = boardEl.getBoundingClientRect();
+  
+  // Position the ghost piece over the square
+  const left = squareRect.left - boardRect.left;
+  const top = squareRect.top - boardRect.top;
+  ghostPiece.style.left = `${left}px`;
+  ghostPiece.style.top = `${top}px`;
+  
+  // Create a direct piece element - simplified from chessboard library
+  const pieceSVG = document.createElement('div');
+  pieceSVG.className = 'ghost-piece-svg';
+  pieceSVG.style.width = '100%';
+  pieceSVG.style.height = '100%';
+  
+  // Create the piece directly with an img element for maximum compatibility
+  const pieceImg = document.createElement('img');
+  pieceImg.style.width = '100%';
+  pieceImg.style.height = '100%';
+  pieceImg.style.position = 'absolute';
+  pieceImg.style.top = '0';
+  pieceImg.style.left = '0';
+  
+  // Set the image source based on piece type
+  const pieceName = `${pieceClass}${pieceType.toUpperCase()}`;
+  pieceImg.src = `img/chesspieces/wikipedia/${pieceName}.png`;
+  
+  // In case the image fails to load, add a fallback background
+  pieceImg.onerror = () => {
+    // Fallback to sprite if image fails
+    pieceSVG.style.backgroundImage = `url('assets/images/chessboard-sprite-staunty.svg')`;
+    pieceSVG.style.backgroundSize = '400%';
+    
+    // Set the piece sprite background position based on piece type
+    switch(`${pieceClass}${pieceType}`) {
+      case 'wp': pieceSVG.style.backgroundPosition = '0 0'; break;
+      case 'wn': pieceSVG.style.backgroundPosition = '-100% 0'; break;
+      case 'wb': pieceSVG.style.backgroundPosition = '-200% 0'; break;
+      case 'wr': pieceSVG.style.backgroundPosition = '-300% 0'; break;
+      case 'wq': pieceSVG.style.backgroundPosition = '0 -100%'; break;
+      case 'wk': pieceSVG.style.backgroundPosition = '-100% -100%'; break;
+      case 'bp': pieceSVG.style.backgroundPosition = '-200% -100%'; break;
+      case 'bn': pieceSVG.style.backgroundPosition = '-300% -100%'; break;
+      case 'bb': pieceSVG.style.backgroundPosition = '0 -200%'; break;
+      case 'br': pieceSVG.style.backgroundPosition = '-100% -200%'; break;
+      case 'bq': pieceSVG.style.backgroundPosition = '-200% -200%'; break;
+      case 'bk': pieceSVG.style.backgroundPosition = '-300% -200%'; break;
+    }
+  };
+  
+  // Add the image to the ghost piece
+  pieceSVG.appendChild(pieceImg);
+  ghostPiece.appendChild(pieceSVG);
+  
+  // Add it to the board container
+  const boardContainer = boardEl.closest('.board-container');
+  if (boardContainer) {
+    boardContainer.appendChild(ghostPiece);
+    
+    // Make the source piece semi-transparent
+    // Add a class directly to all the source squares for more reliable opacity change
+    if (type === 'player' && currentPeekArrow && currentPeekArrow.playerFrom) {
+      const sourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.playerFrom}"]`);
+      if (sourceSquare) {
+        // Add a class to mark this as a source square for peeking
+        sourceSquare.classList.add('peek-source-square');
+        
+        // Also try a more direct approach - get all pieces within this square
+        const pieceLayers = sourceSquare.querySelectorAll('.piece, .draggable-source');
+        pieceLayers.forEach(pieceLayer => {
+          pieceLayer.style.opacity = '0.3';
+          // Use !important to make sure it applies
+          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
+        });
+        
+        // Use our helper function to directly modify SVG elements
+        setChessPieceOpacity(currentPeekArrow.playerFrom, 0.3);
+      }
+    } else if (type === 'ai' && currentPeekArrow && currentPeekArrow.aiFrom) {
+      // Also make AI source pieces semi-transparent
+      const aiSourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.aiFrom}"]`);
+      if (aiSourceSquare) {
+        // Add a class to mark this as a source square for peeking
+        aiSourceSquare.classList.add('peek-source-square');
+        
+        // Get all pieces within this square
+        const aiPieceLayers = aiSourceSquare.querySelectorAll('.piece, .draggable-source');
+        aiPieceLayers.forEach(pieceLayer => {
+          pieceLayer.style.opacity = '0.3';
+          // Use !important to make sure it applies
+          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
+        });
+        
+        // Use our helper function to directly modify SVG elements
+        setChessPieceOpacity(currentPeekArrow.aiFrom, 0.3);
+      }
+    } else if (type === 'ai-secondary' && currentPeekArrow && currentPeekArrow.aiRookFrom) {
+      // Handle the rook's source piece for castling
+      const rookSourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.aiRookFrom}"]`);
+      if (rookSourceSquare) {
+        // Add a class to mark this as a source square for peeking
+        rookSourceSquare.classList.add('peek-source-square');
+        
+        // Get all pieces within this square
+        const rookPieceLayers = rookSourceSquare.querySelectorAll('.piece, .draggable-source');
+        rookPieceLayers.forEach(pieceLayer => {
+          pieceLayer.style.opacity = '0.3';
+          // Use !important to make sure it applies
+          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
+        });
+        
+        // Use our helper function to directly modify SVG elements
+        setChessPieceOpacity(currentPeekArrow.aiRookFrom, 0.3);
+      }
+    }
+  }
+}
+
+// Helper function to directly set opacity on SVG pieces in the chessboard
+function setChessPieceOpacity(square, opacity) {
+  // First, try the direct SVG use element approach (which is what CM-Chessboard uses)
+  const pieceElements = document.querySelectorAll(`.cm-chessboard .board .square[data-square="${square}"] use, 
+                                                   .cm-chessboard .board .square[data-square="${square}"] .piece,
+                                                   .cm-chessboard .piece[data-square="${square}"]`);
+  
+  if (pieceElements.length > 0) {
+    pieceElements.forEach(element => {
+      // For SVG elements, we need to modify the style attribute
+      if (element instanceof SVGElement) {
+        // If it's an SVG element, we can use the style.opacity
+        element.style.opacity = opacity;
+        
+        // For 'use' elements in SVG, also try setting attributes directly
+        if (element.tagName.toLowerCase() === 'use') {
+          element.setAttribute('opacity', opacity);
+        }
+      } else {
+        // For regular HTML elements
+        element.style.opacity = opacity;
+      }
+    });
+  }
+  
+  // Also try finding the piece via the piece layer in the chessboard
+  const pieceLayer = document.querySelector(`.cm-chessboard .pieces .piece[data-square="${square}"]`);
+  if (pieceLayer) {
+    pieceLayer.style.opacity = opacity;
+    
+    // If it has child SVG elements, set their opacity too
+    const svgElements = pieceLayer.querySelectorAll('svg, use, g, path');
+    svgElements.forEach(svg => {
+      if (svg instanceof SVGElement) {
+        svg.style.opacity = opacity;
+        svg.setAttribute('opacity', opacity);
+      }
+    });
+  }
+  
+  // One more approach - try finding any elements with the square attribute
+  document.querySelectorAll(`[data-square="${square}"]`).forEach(element => {
+    // If it's a piece or contains a piece representation
+    if (element.classList.contains('piece') || 
+        element.querySelector('.piece') || 
+        element.closest('.pieces')) {
+      
+      element.style.opacity = opacity;
+      
+      // Set opacity on all children
+      const children = element.querySelectorAll('*');
+      children.forEach(child => {
+        // Skip ghost pieces
+        if (!child.closest('.peek-ghost-piece')) {
+          child.style.opacity = opacity;
+          
+          // For SVG elements
+          if (child instanceof SVGElement) {
+            child.setAttribute('opacity', opacity);
+          }
+        }
+      });
+    }
+  });
+}
+
+// Function to reset all chess piece opacity
+function resetChessPieceOpacity() {
+  // Reset all piece elements
+  document.querySelectorAll('.cm-chessboard .piece, .cm-chessboard use').forEach(piece => {
+    piece.style.opacity = '';
+    
+    // For SVG elements
+    if (piece instanceof SVGElement) {
+      piece.removeAttribute('opacity');
+    }
+  });
+  
+  // Also reset any elements that have inline opacity style
+  document.querySelectorAll('[style*="opacity"]').forEach(element => {
+    // Only target elements related to the chessboard
+    if (element.closest('.cm-chessboard') && 
+        !element.classList.contains('peek-ghost-piece')) {
+      // Extract the current style and remove opacity
+      let style = element.getAttribute('style') || '';
+      style = style.replace(/opacity\s*:\s*[^;]+(!important)?;?/g, '');
+      if (style.trim()) {
+        element.setAttribute('style', style);
+      } else {
+        element.removeAttribute('style');
+      }
+    }
+  });
+  
+  // Also directly reset all pieces by square
+  for (let row = 1; row <= 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const square = String.fromCharCode('a'.charCodeAt(0) + col) + row;
+      // Find all elements associated with this square
+      document.querySelectorAll(`[data-square="${square}"]`).forEach(element => {
+        element.style.opacity = '';
+        // Reset any children as well
+        element.querySelectorAll('*').forEach(child => {
+          child.style.opacity = '';
+          if (child instanceof SVGElement) {
+            child.removeAttribute('opacity');
+          }
+        });
+      });
+    }
+  }
+  
+  // Also reset by square class
+  document.querySelectorAll('.peek-source-square').forEach(square => {
+    square.classList.remove('peek-source-square');
+  });
+}
+
+// Function to clear all peek visualizations
+function clearPeekVisualizations() {
+  // Reset all chess piece opacity using our helper function
+  resetChessPieceOpacity();
+
+  // Find any pieces that were made transparent and restore them
+  document.querySelectorAll('.cm-chessboard .board .piece').forEach(piece => {
+    if (piece.style.opacity !== '') {
+      piece.style.opacity = '';
+    }
+  });
+  
+  // Also clear any source square classes we added
+  document.querySelectorAll('.cm-chessboard .square.peek-source-square').forEach(square => {
+    square.classList.remove('peek-source-square');
+    // Find all elements within this square and reset their opacity
+    square.querySelectorAll('*').forEach(el => {
+      if (el.style.opacity !== '') {
+        el.style.opacity = '';
+      }
+    });
+  });
+  
+  // Clean up any inline styles that might have been forcefully added
+  document.querySelectorAll('.cm-chessboard [style*="opacity"]').forEach(el => {
+    // Only reset if it's related to our peek functionality (not affecting other UI elements)
+    if (el.closest('.square') || el.classList.contains('piece') || el.classList.contains('draggable-source')) {
+      // Extract the current style and remove opacity
+      let style = el.getAttribute('style') || '';
+      style = style.replace(/opacity\s*:\s*[^;]+(!important)?;?/g, '');
+      if (style.trim()) {
+        el.setAttribute('style', style);
+      } else {
+        el.removeAttribute('style');
+      }
+    }
+  });
+  
+  // Remove any existing ghost pieces
+  document.querySelectorAll('.peek-ghost-piece').forEach(ghost => {
+    ghost.parentNode.removeChild(ghost);
+  });
+  
+  // Clear existing arrows if any
+  arrows.removeArrows();
+  
+  // Clear any peek square highlights
+  clearPeekHighlights();
+}
+
+// Function to clear peek square highlights
+function clearPeekHighlights() {
+  // Remove any peek-related highlights on squares
+  document.querySelectorAll('.cm-chessboard .square.peek-highlight').forEach(sq => {
+    sq.classList.remove('peek-highlight');
+  });
+  // Also remove any other peek-related classes we might have used
+  document.querySelectorAll('.cm-chessboard .square.peek-source').forEach(sq => {
+    sq.classList.remove('peek-source');
+  });
+  document.querySelectorAll('.cm-chessboard .square.peek-target').forEach(sq => {
+    sq.classList.remove('peek-target');
+  });
 }

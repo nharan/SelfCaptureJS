@@ -1,0 +1,148 @@
+.peek-active {
+  background-color: #007bff !important;
+  color: #fff !important;
+  border-color: #0069d9 !important;
+  box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5) !important;
+  font-weight: bold !important;
+  transform: translateY(1px) !important;
+} 
+
+/* Animation to make the button more noticeable when active */
+@keyframes peek-pulse {
+  0% { box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5); }
+  50% { box-shadow: 0 0 0 0.25rem rgba(38, 143, 255, 0.7); }
+  100% { box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5); }
+}
+
+.peek-active {
+  animation: peek-pulse 1.5s infinite ease-in-out;
+}
+
+/* Arrow styles for Peek feature */
+.cm-chessboard .arrow-danger .arrow-head {
+  fill: #dc3545 !important;
+  fill-rule: nonzero;
+  fill-opacity: 1;
+}
+
+.cm-chessboard .arrow-danger .arrow-line {
+  stroke: #dc3545 !important;
+  stroke-width: 6px !important;
+  stroke-linecap: round !important;
+  stroke-opacity: 0.8 !important;
+  visibility: visible !important;
+}
+
+/* Fix for SVG arrows */
+.cm-chessboard .arrows line {
+  visibility: visible !important;
+  stroke-width: 6px !important;
+}
+
+/* Ghost pieces for peek visualization */
+.peek-ghost-piece {
+  pointer-events: none; /* Make sure it doesn't interfere with clicks */
+  transition: all 0.2s ease;
+  border-radius: 50% !important;
+  overflow: visible !important;
+  z-index: 100 !important; /* Ensure it's on top */
+}
+
+.ghost-piece-svg {
+  width: 100% !important;
+  height: 100% !important;
+  background-size: 400% !important;
+  background-repeat: no-repeat !important;
+  background-position: center center !important;
+}
+
+.peek-player {
+  opacity: 0.9 !important;
+  animation: ghost-pulse-blue 1.5s infinite alternate;
+  background-color: rgba(52, 152, 219, 0.2) !important;
+}
+
+.peek-ai {
+  opacity: 0.85 !important;
+  animation: ghost-pulse-red 1.5s infinite alternate;
+  background-color: rgba(231, 76, 60, 0.2) !important;
+}
+
+.peek-ai-secondary {
+  opacity: 0.75 !important;
+  animation: ghost-pulse-red 1.5s infinite alternate;
+  background-color: rgba(231, 76, 60, 0.15) !important;
+}
+
+@keyframes ghost-pulse-blue {
+  from { box-shadow: 0 0 5px 2px rgba(52, 152, 219, 0.4); }
+  to { box-shadow: 0 0 12px 5px rgba(52, 152, 219, 0.7); }
+}
+
+@keyframes ghost-pulse-red {
+  from { box-shadow: 0 0 5px 2px rgba(231, 76, 60, 0.4); }
+  to { box-shadow: 0 0 12px 5px rgba(231, 76, 60, 0.7); }
+}
+
+/* Peek Mode Button Styling */
+.btn.peek-active {
+  background-color: #007bff;
+  color: #fff;
+  border-color: #0069d9;
+  font-weight: bold;
+  box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 10px rgba(0, 123, 255, 0.5); }
+  50% { box-shadow: 0 0 15px rgba(0, 123, 255, 0.8); }
+  100% { box-shadow: 0 0 10px rgba(0, 123, 255, 0.5); }
+}
+
+/* Ghost Piece Styling */
+.peek-ghost-piece {
+  background-color: rgba(255, 255, 255, 0.15);
+  transition: all 0.2s ease-in-out;
+}
+
+.peek-ghost-piece.peek-player {
+  opacity: 0.9 !important;
+  animation: player-ghost-pulse 2s infinite;
+}
+
+.peek-ghost-piece.peek-ai {
+  opacity: 0.85 !important;
+  animation: ai-ghost-pulse 2s infinite;
+}
+
+@keyframes player-ghost-pulse {
+  0% { box-shadow: 0 0 10px rgba(52, 152, 219, 0.6); }
+  50% { box-shadow: 0 0 15px rgba(52, 152, 219, 0.9); }
+  100% { box-shadow: 0 0 10px rgba(52, 152, 219, 0.6); }
+}
+
+@keyframes ai-ghost-pulse {
+  0% { box-shadow: 0 0 10px rgba(231, 76, 60, 0.6); }
+  50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.9); }
+  100% { box-shadow: 0 0 10px rgba(231, 76, 60, 0.6); }
+}
+
+/* Source Piece Fading - make sure this is always applied */
+.cm-chessboard .square.peek-source-square .piece,
+.cm-chessboard .square[class*="peek-source"] .piece {
+  opacity: 0.3 !important;
+}
+
+/* Force opacity on all piece layers in source squares */
+.peek-source-square .piece,
+.peek-source-square .draggable-source,
+.peek-source-square svg,
+.peek-source-square use {
+  opacity: 0.3 !important;
+}
+
+/* Also apply opacity to any SVG elements within the source square */
+.peek-source-square svg * {
+  opacity: 0.3 !important;
+} 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns="http://www.w3.org/2000/svg"
+   width="40"
+   height="40"
+   viewBox="0 0 40 40"
+   id="svg2">
+  
+  <!-- Arrow Default (simple triangle) -->
+  <g id="arrowDefault">
+    <path
+       d="M 0,0 L 40,20 L 0,40 Z"
+       style="fill-rule:evenodd;stroke:none;" />
+  </g>
+  
+  <!-- Arrow Pointy (more elongated triangle) -->
+  <g id="arrowPointy">
+    <path
+       d="M 0,0 L 40,20 L 0,40 Z"
+       style="fill-rule:evenodd;stroke:none;" />
+  </g>
+</svg> 
