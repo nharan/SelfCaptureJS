@@ -142,7 +142,11 @@ let currentPeekArrow = null;
 let lastHoveredSquare = null;
 let lastPeekCalculationTime = null;
 let isPeekCalculating = false;
-const PEEK_THROTTLE_DELAY = 100; // ms - how often to calculate peek results at most
+const PEEK_THROTTLE_DELAY = 250; // Increased from 100ms to 250ms to reduce calculations
+
+// Cache for peek calculations to avoid recalculating the same moves
+const peekResultCache = new Map(); // Map<fromSquare_toSquare, {result}>
+const MAX_CACHE_SIZE = 30; // Limit cache size to prevent memory issues
 
 // Add CSS for self-capture highlight
 const selfCaptureStyle = document.createElement('style');
@@ -498,89 +502,86 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Mouse move listener to highlight potential self-captures
   document.addEventListener('mousemove', (e) => {
-    // Check if we're dragging
+    // Only process if Peek is enabled or we need to highlight self-captures
+    if (!dragSourceSquare) return;
+    
+    // Get the draggable piece reference just once
     const draggablePiece = document.querySelector('.cm-chessboard-draggable-piece');
-    if (!draggablePiece || !dragSourceSquare) return;
+    if (!draggablePiece) return;
     
-    // Hide draggable piece temporarily to find element below
-    const originalStyle = draggablePiece.style.display;
-    draggablePiece.style.display = 'none';
-    const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
-    draggablePiece.style.display = originalStyle;
+    // Use a more efficient approach to find the element under the cursor
+    // This avoids having to modify draggablePiece display which causes reflows
+    const elemBelow = elementFromPointWithDraggable(e.clientX, e.clientY, draggablePiece);
+    if (!elemBelow) return;
     
-    // Clear any existing highlights
-    document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
-      sq.classList.remove('self-capture-highlight');
-    });
+    // Check if we're over a board square and it's not the source square
+    if (!elemBelow.classList.contains('square')) return;
     
-    // Check if we're over a board square
-    if (elemBelow && elemBelow.classList.contains('square')) {
-      const targetSquare = elemBelow.getAttribute('data-square');
+    const targetSquare = elemBelow.getAttribute('data-square');
+    if (!targetSquare || targetSquare === dragSourceSquare) return;
+    
+    // Handle self-capture highlighting (only when needed)
+    if (elemBelow.querySelector('.piece')) {
+      const position = game.getFEN().split(' ')[0];
+      const sourcePiece = getPieceAtSquare(position, dragSourceSquare);
+      const targetPiece = getPieceAtSquare(position, targetSquare);
       
-      // Don't highlight the source square
-      if (targetSquare && targetSquare !== dragSourceSquare) {
-        // Check if this is a potential self-capture
-        const position = game.getFEN().split(' ')[0];
-        const sourcePiece = getPieceAtSquare(position, dragSourceSquare);
-        const targetPiece = getPieceAtSquare(position, targetSquare);
+      // Clear any previous self-capture highlights
+      document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
+        sq.classList.remove('self-capture-highlight');
+      });
+      
+      if (sourcePiece && targetPiece) {
+        // Check if same color
+        const sourceIsWhite = sourcePiece === sourcePiece.toUpperCase();
+        const targetIsWhite = targetPiece === targetPiece.toUpperCase();
         
-        if (sourcePiece && targetPiece) {
-          // Check if same color
-          const sourceIsWhite = sourcePiece === sourcePiece.toUpperCase();
-          const targetIsWhite = targetPiece === targetPiece.toUpperCase();
-          
-          if (sourceIsWhite === targetIsWhite) {
-            // Add highlight for potential self-capture
-            elemBelow.classList.add('self-capture-highlight');
-          }
-        }
-        
-        // Peek mode functionality
-        if (peekModeEnabled) {
-          // Only process if this is a different square than last time
-          if (targetSquare !== lastHoveredSquare) {
-            // If we're switching to a new target square, clear any previous peek visualizations first
-            if (lastHoveredSquare !== null) {
-              // Clear any existing visualizations completely before showing new ones
-              clearPeekVisualizations();
-            }
-            
-            // Update the last hovered square
-            lastHoveredSquare = targetSquare;
-            
-            // Check if this is a legal move
-            const moves = game.getMovesAtSquare(dragSourceSquare);
-            if (moves && moves.includes(targetSquare)) {
-              // Use a timestamp-based throttling approach instead of debouncing
-              const now = Date.now();
-              if (!lastPeekCalculationTime || (now - lastPeekCalculationTime) > PEEK_THROTTLE_DELAY) {
-                lastPeekCalculationTime = now;
-                
-                // Clear any ongoing peek calculation
-                if (isPeekCalculating) {
-                  return; // Skip if we're already calculating
-                }
-                
-                // Clear previous arrow
-                if (currentPeekArrow) {
-                  arrows.removeArrows();
-                  currentPeekArrow = null;
-                }
-                
-                // Indicate we're calculating
-                isPeekCalculating = true;
-                
-                // Use requestAnimationFrame for better performance
-                requestAnimationFrame(() => {
-                  simulateMoveAndShowResponse(dragSourceSquare, targetSquare);
-                  isPeekCalculating = false;
-                });
-              }
-            }
-          }
+        if (sourceIsWhite === targetIsWhite) {
+          // Add highlight for potential self-capture
+          elemBelow.classList.add('self-capture-highlight');
         }
       }
     }
+    
+    // Peek mode functionality - only process if enabled
+    if (!peekModeEnabled) return;
+    
+    // Only process new target squares to avoid redundant calculations
+    if (targetSquare === lastHoveredSquare) return;
+    
+    // Check if this is a legal move
+    const moves = game.getMovesAtSquare(dragSourceSquare);
+    if (!moves || !moves.includes(targetSquare)) return;
+    
+    // If we're switching to a new target square, clear previous visualizations
+    if (lastHoveredSquare !== null) {
+      clearPeekVisualizations();
+    }
+    
+    // Update the last hovered square
+    lastHoveredSquare = targetSquare;
+    
+    // Use throttling to prevent too many calculations
+    const now = Date.now();
+    if (isPeekCalculating || (lastPeekCalculationTime && (now - lastPeekCalculationTime) <= PEEK_THROTTLE_DELAY)) {
+      return; // Skip if we're already calculating or it's too soon
+    }
+    
+    // Update the timestamp and set calculating flag
+    lastPeekCalculationTime = now;
+    isPeekCalculating = true;
+    
+    // Clear previous arrow if any
+    if (currentPeekArrow) {
+      arrows.removeArrows();
+      currentPeekArrow = null;
+    }
+    
+    // Use requestAnimationFrame for better performance
+    requestAnimationFrame(() => {
+      simulateMoveAndShowResponse(dragSourceSquare, targetSquare);
+      isPeekCalculating = false;
+    });
   });
   
   // Clear highlights when drag ends
@@ -615,6 +616,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// Helper function to find element below draggable piece without hiding it
+function elementFromPointWithDraggable(x, y, draggablePiece) {
+  // Save current styles to restore later
+  const originalPointerEvents = draggablePiece.style.pointerEvents;
+  
+  // Make draggable piece "transparent" to mouse events
+  draggablePiece.style.pointerEvents = 'none';
+  
+  // Get the element below
+  const element = document.elementFromPoint(x, y);
+  
+  // Restore original styles
+  draggablePiece.style.pointerEvents = originalPointerEvents;
+  
+  return element;
+}
 
 // Check board status
 function updateStatus() {
@@ -778,47 +796,48 @@ soundToggle.addEventListener("change", () => {
 
 // Add Peek button event listener
 peekButton.addEventListener("click", () => {
+  // When turning off Peek mode, clean up everything first
+  if (peekModeEnabled) {
+    // Fully clean up any peek visualizations
+    clearPeekVisualizations();
+    
+    // Reset all the state variables
+    isPeekCalculating = false;
+    lastPeekCalculationTime = null;
+    currentPeekArrow = null;
+    lastHoveredSquare = null;
+    
+    // Clear the cache to avoid stale results when re-enabling
+    peekResultCache.clear();
+  }
+  
+  // Toggle the mode flag
   peekModeEnabled = !peekModeEnabled;
   
   // Update button appearance
   if (peekModeEnabled) {
     peekButton.classList.add("peek-active");
     peekButton.innerHTML = "👁️ Peek [ON]";
-    // Also show a notification
+    
+    // Show notification
     const notification = document.createElement('div');
-    notification.style.position = 'fixed';
-    notification.style.top = '10px';
-    notification.style.left = '50%';
-    notification.style.transform = 'translateX(-50%)';
-    notification.style.backgroundColor = '#007bff';
-    notification.style.color = 'white';
-    notification.style.padding = '10px 20px';
-    notification.style.borderRadius = '5px';
-    notification.style.zIndex = '9999';
-    notification.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+    notification.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background-color:#007bff;color:white;padding:10px 20px;border-radius:5px;z-index:9999;box-shadow:0 2px 10px rgba(0,0,0,0.2);';
     notification.textContent = 'Peek Mode Activated';
     document.body.appendChild(notification);
+    
+    // Fade out notification
     setTimeout(() => {
       notification.style.opacity = '0';
       notification.style.transition = 'opacity 1s ease';
-      setTimeout(() => document.body.removeChild(notification), 1000);
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 1000);
     }, 2000);
   } else {
     peekButton.classList.remove("peek-active");
     peekButton.innerHTML = "👁️ Peek";
-    
-    // Clear any peek calculation state when disabling
-    isPeekCalculating = false;
-    lastPeekCalculationTime = null;
-    
-    // Clear any existing visualizations
-    clearPeekVisualizations();
-    
-    // Reset peek state
-    currentPeekArrow = null;
-    
-    // Reset state
-    lastHoveredSquare = null;
   }
   
   console.log("Peek mode " + (peekModeEnabled ? "enabled" : "disabled"));
@@ -1218,6 +1237,22 @@ function fenToBoard(fenPosition) {
 
 // Function to simulate a move and show the AI's response
 function simulateMoveAndShowResponse(fromSquare, toSquare) {
+  // Create a cache key
+  const cacheKey = `${fromSquare}_${toSquare}`;
+  
+  // Check if we have this result cached
+  if (peekResultCache.has(cacheKey)) {
+    // Use cached result
+    const cachedResult = peekResultCache.get(cacheKey);
+    
+    // Clear any existing visualizations
+    clearPeekVisualizations();
+    
+    // Show the cached result
+    showPeekResult(cachedResult);
+    return;
+  }
+  
   // Save the current game state
   const currentFEN = game.getFEN();
   
@@ -1227,7 +1262,7 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
   // Reset opacity of all pieces to ensure we don't have leftover transparency
   resetChessPieceOpacity();
   
-  // Store the current peek state (do this first so it's available to ghost piece function)
+  // Store the current peek state
   currentPeekArrow = { 
     playerFrom: fromSquare, 
     playerTo: toSquare 
@@ -1243,6 +1278,13 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
     
     // Show a ghost of the player's piece at the destination
     showGhostPiece(sourcePiece, toSquare, 'player');
+    
+    // Create an object to store the results for caching
+    const peekResult = {
+      playerFrom: fromSquare,
+      playerTo: toSquare,
+      playerPiece: sourcePiece,
+    };
     
     // Try to make the move
     const moveResult = game.move(fromSquare, toSquare);
@@ -1277,6 +1319,11 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
             currentPeekArrow.aiTo = aiToSquare;
             currentPeekArrow.aiPiece = aiPiece;
             
+            // Add to the result object for caching
+            peekResult.aiFrom = aiFromSquare;
+            peekResult.aiTo = aiToSquare;
+            peekResult.aiPiece = aiPiece;
+            
             // Show a ghost of the AI's piece at its destination
             showGhostPiece(aiPiece, aiToSquare, 'ai');
           }
@@ -1299,11 +1346,16 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
               aiPiece = 'k'; // Black king
             }
             
-            // Update the peek state
+            // Update the peek state and result object
             currentPeekArrow.aiFrom = aiFromSquare;
             currentPeekArrow.aiTo = aiToSquare;
             currentPeekArrow.aiPiece = aiPiece;
             currentPeekArrow.isCastling = true;
+            
+            peekResult.aiFrom = aiFromSquare;
+            peekResult.aiTo = aiToSquare;
+            peekResult.aiPiece = aiPiece;
+            peekResult.isCastling = true;
             
             // Show a ghost of the AI's king at its destination
             showGhostPiece(aiPiece, aiToSquare, 'ai');
@@ -1317,10 +1369,14 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
               (side === 'w' ? 'd1' : 'd8');
             const rookPiece = side === 'w' ? 'R' : 'r';
             
-            // Update the peek state with rook info
+            // Update the peek state and result object with rook info
             currentPeekArrow.aiRookFrom = rookFromSquare;
             currentPeekArrow.aiRookTo = rookToSquare;
             currentPeekArrow.aiRookPiece = rookPiece;
+            
+            peekResult.aiRookFrom = rookFromSquare;
+            peekResult.aiRookTo = rookToSquare;
+            peekResult.aiRookPiece = rookPiece;
             
             // Show ghost of the rook
             showGhostPiece(rookPiece, rookToSquare, 'ai-secondary');
@@ -1337,10 +1393,14 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
               aiPiece = getPieceAtSquare(afterPlayerMoveFEN, aiFromSquare);
               
               if (aiPiece) {
-                // Update the peek state
+                // Update the peek state and result object
                 currentPeekArrow.aiFrom = aiFromSquare;
                 currentPeekArrow.aiTo = aiToSquare;
                 currentPeekArrow.aiPiece = aiPiece;
+                
+                peekResult.aiFrom = aiFromSquare;
+                peekResult.aiTo = aiToSquare;
+                peekResult.aiPiece = aiPiece;
                 
                 // Show a ghost of the AI's piece at its destination
                 showGhostPiece(aiPiece, aiToSquare, 'ai');
@@ -1348,14 +1408,46 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
             }
           }
         }
+        
+        // Cache the result
+        if (peekResultCache.size >= MAX_CACHE_SIZE) {
+          // Remove the oldest entry if cache is full
+          const firstKey = peekResultCache.keys().next().value;
+          peekResultCache.delete(firstKey);
+        }
+        peekResultCache.set(cacheKey, peekResult);
       } else {
         // Restore the original position
         game.setFEN(currentFEN);
+        
+        // Cache the player-only move
+        peekResultCache.set(cacheKey, peekResult);
       }
     } else {
       // Invalid move, clear any visualizations
       clearPeekVisualizations();
     }
+  }
+}
+
+// Helper function to show peek results from cache
+function showPeekResult(result) {
+  // Set current peek arrow state
+  currentPeekArrow = result;
+  
+  // Show player ghost piece
+  if (result.playerPiece && result.playerTo) {
+    showGhostPiece(result.playerPiece, result.playerTo, 'player');
+  }
+  
+  // Show AI ghost piece if available
+  if (result.aiPiece && result.aiTo) {
+    showGhostPiece(result.aiPiece, result.aiTo, 'ai');
+  }
+  
+  // Show rook for castling if needed
+  if (result.aiRookPiece && result.aiRookTo) {
+    showGhostPiece(result.aiRookPiece, result.aiRookTo, 'ai-secondary');
   }
 }
 
@@ -1367,8 +1459,16 @@ function showGhostPiece(piece, square, type = 'player') {
   
   // Get the board size and calculate the piece size
   const boardEl = document.getElementById('board');
-  const boardSize = boardEl.getBoundingClientRect().width;
+  const boardRect = boardEl.getBoundingClientRect();
+  const boardSize = boardRect.width;
   const squareSize = boardSize / 8;
+  
+  // Check if there's already a ghost piece for this square and type
+  const existingGhost = document.querySelector(`.peek-ghost-piece.peek-${type}[data-square="${square}"]`);
+  if (existingGhost) {
+    // If we already have a ghost piece for this square, just return
+    return;
+  }
   
   // Create a ghost piece element
   const ghostPiece = document.createElement('div');
@@ -1380,140 +1480,110 @@ function showGhostPiece(piece, square, type = 'player') {
   const pieceClass = piece.toUpperCase() === piece ? 'w' : 'b';
   const pieceType = piece.toLowerCase();
   
-  // Set the styling
-  ghostPiece.style.position = 'absolute';
-  ghostPiece.style.width = `${squareSize}px`;
-  ghostPiece.style.height = `${squareSize}px`;
-  ghostPiece.style.opacity = type === 'player' ? '0.9' : '0.85';
-  ghostPiece.style.zIndex = '100'; // Ensure it's above other elements
-  ghostPiece.style.pointerEvents = 'none'; // Ensure it doesn't interfere with clicking
+  // Prepare all styles in a batch to reduce reflows
+  const styles = {
+    position: 'absolute',
+    width: `${squareSize}px`,
+    height: `${squareSize}px`,
+    opacity: type === 'player' ? '0.9' : '0.85',
+    zIndex: '100',
+    pointerEvents: 'none',
+    borderRadius: '50%'
+  };
   
   // Different border colors for player vs AI ghosts
   const borderColor = type === 'player' ? '#3498db' : '#e74c3c';
   const glowColor = type === 'player' ? 'rgba(52, 152, 219, 0.6)' : 'rgba(231, 76, 60, 0.6)';
   
-  // Add a subtle border and shadow for the ghost piece
-  ghostPiece.style.border = `2px solid ${borderColor}`;
-  ghostPiece.style.boxShadow = `0 0 10px ${glowColor}`;
-  ghostPiece.style.borderRadius = '50%';
+  // Add border and shadow
+  styles.border = `2px solid ${borderColor}`;
+  styles.boxShadow = `0 0 10px ${glowColor}`;
   
   // Calculate the position of the square
   const squareRect = targetSquare.getBoundingClientRect();
-  const boardRect = boardEl.getBoundingClientRect();
-  
-  // Position the ghost piece over the square
   const left = squareRect.left - boardRect.left;
   const top = squareRect.top - boardRect.top;
-  ghostPiece.style.left = `${left}px`;
-  ghostPiece.style.top = `${top}px`;
+  styles.left = `${left}px`;
+  styles.top = `${top}px`;
   
-  // Create a direct piece element - simplified from chessboard library
+  // Apply all styles at once to reduce reflows
+  Object.assign(ghostPiece.style, styles);
+  
+  // Create a direct piece element
   const pieceSVG = document.createElement('div');
   pieceSVG.className = 'ghost-piece-svg';
-  pieceSVG.style.width = '100%';
-  pieceSVG.style.height = '100%';
+  pieceSVG.style.cssText = 'width:100%;height:100%;';
   
-  // Create the piece directly with an img element for maximum compatibility
+  // Create the piece image
   const pieceImg = document.createElement('img');
-  pieceImg.style.width = '100%';
-  pieceImg.style.height = '100%';
-  pieceImg.style.position = 'absolute';
-  pieceImg.style.top = '0';
-  pieceImg.style.left = '0';
+  pieceImg.style.cssText = 'width:100%;height:100%;position:absolute;top:0;left:0;';
   
-  // Set the image source based on piece type
+  // Set the image source
   const pieceName = `${pieceClass}${pieceType.toUpperCase()}`;
   pieceImg.src = `img/chesspieces/wikipedia/${pieceName}.png`;
   
-  // In case the image fails to load, add a fallback background
+  // Add fallback for image load errors
   pieceImg.onerror = () => {
-    // Fallback to sprite if image fails
     pieceSVG.style.backgroundImage = `url('assets/images/chessboard-sprite-staunty.svg')`;
     pieceSVG.style.backgroundSize = '400%';
     
-    // Set the piece sprite background position based on piece type
-    switch(`${pieceClass}${pieceType}`) {
-      case 'wp': pieceSVG.style.backgroundPosition = '0 0'; break;
-      case 'wn': pieceSVG.style.backgroundPosition = '-100% 0'; break;
-      case 'wb': pieceSVG.style.backgroundPosition = '-200% 0'; break;
-      case 'wr': pieceSVG.style.backgroundPosition = '-300% 0'; break;
-      case 'wq': pieceSVG.style.backgroundPosition = '0 -100%'; break;
-      case 'wk': pieceSVG.style.backgroundPosition = '-100% -100%'; break;
-      case 'bp': pieceSVG.style.backgroundPosition = '-200% -100%'; break;
-      case 'bn': pieceSVG.style.backgroundPosition = '-300% -100%'; break;
-      case 'bb': pieceSVG.style.backgroundPosition = '0 -200%'; break;
-      case 'br': pieceSVG.style.backgroundPosition = '-100% -200%'; break;
-      case 'bq': pieceSVG.style.backgroundPosition = '-200% -200%'; break;
-      case 'bk': pieceSVG.style.backgroundPosition = '-300% -200%'; break;
-    }
+    // Set background position based on piece type
+    const positions = {
+      'wp': '0 0', 'wn': '-100% 0', 'wb': '-200% 0', 'wr': '-300% 0',
+      'wq': '0 -100%', 'wk': '-100% -100%', 'bp': '-200% -100%', 'bn': '-300% -100%',
+      'bb': '0 -200%', 'br': '-100% -200%', 'bq': '-200% -200%', 'bk': '-300% -200%'
+    };
+    pieceSVG.style.backgroundPosition = positions[`${pieceClass}${pieceType}`] || '0 0';
   };
   
-  // Add the image to the ghost piece
+  // Build the DOM structure
   pieceSVG.appendChild(pieceImg);
   ghostPiece.appendChild(pieceSVG);
   
-  // Add it to the board container
+  // Find the board container and add the ghost piece
   const boardContainer = boardEl.closest('.board-container');
   if (boardContainer) {
     boardContainer.appendChild(ghostPiece);
     
-    // Make the source piece semi-transparent
-    // Add a class directly to all the source squares for more reliable opacity change
-    if (type === 'player' && currentPeekArrow && currentPeekArrow.playerFrom) {
-      const sourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.playerFrom}"]`);
-      if (sourceSquare) {
-        // Add a class to mark this as a source square for peeking
-        sourceSquare.classList.add('peek-source-square');
-        
-        // Also try a more direct approach - get all pieces within this square
-        const pieceLayers = sourceSquare.querySelectorAll('.piece, .draggable-source');
-        pieceLayers.forEach(pieceLayer => {
-          pieceLayer.style.opacity = '0.3';
-          // Use !important to make sure it applies
-          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
-        });
-        
-        // Use our helper function to directly modify SVG elements
-        setChessPieceOpacity(currentPeekArrow.playerFrom, 0.3);
-      }
-    } else if (type === 'ai' && currentPeekArrow && currentPeekArrow.aiFrom) {
-      // Also make AI source pieces semi-transparent
-      const aiSourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.aiFrom}"]`);
-      if (aiSourceSquare) {
-        // Add a class to mark this as a source square for peeking
-        aiSourceSquare.classList.add('peek-source-square');
-        
-        // Get all pieces within this square
-        const aiPieceLayers = aiSourceSquare.querySelectorAll('.piece, .draggable-source');
-        aiPieceLayers.forEach(pieceLayer => {
-          pieceLayer.style.opacity = '0.3';
-          // Use !important to make sure it applies
-          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
-        });
-        
-        // Use our helper function to directly modify SVG elements
-        setChessPieceOpacity(currentPeekArrow.aiFrom, 0.3);
-      }
-    } else if (type === 'ai-secondary' && currentPeekArrow && currentPeekArrow.aiRookFrom) {
-      // Handle the rook's source piece for castling
-      const rookSourceSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${currentPeekArrow.aiRookFrom}"]`);
-      if (rookSourceSquare) {
-        // Add a class to mark this as a source square for peeking
-        rookSourceSquare.classList.add('peek-source-square');
-        
-        // Get all pieces within this square
-        const rookPieceLayers = rookSourceSquare.querySelectorAll('.piece, .draggable-source');
-        rookPieceLayers.forEach(pieceLayer => {
-          pieceLayer.style.opacity = '0.3';
-          // Use !important to make sure it applies
-          pieceLayer.setAttribute('style', pieceLayer.getAttribute('style') + '; opacity: 0.3 !important;');
-        });
-        
-        // Use our helper function to directly modify SVG elements
-        setChessPieceOpacity(currentPeekArrow.aiRookFrom, 0.3);
-      }
+    // Handle piece transparency (optimize by organizing by piece type)
+    let sourceSquare;
+    
+    if (type === 'player' && currentPeekArrow?.playerFrom) {
+      sourceSquare = currentPeekArrow.playerFrom;
+    } else if (type === 'ai' && currentPeekArrow?.aiFrom) {
+      sourceSquare = currentPeekArrow.aiFrom;
+    } else if (type === 'ai-secondary' && currentPeekArrow?.aiRookFrom) {
+      sourceSquare = currentPeekArrow.aiRookFrom;
+    }
+    
+    if (sourceSquare) {
+      fadeSourcePiece(sourceSquare);
     }
   }
+}
+
+// Split out the piece fading to a separate function for better performance
+function fadeSourcePiece(sourceSquare) {
+  const squareEl = document.querySelector(`.cm-chessboard .board .square[data-square="${sourceSquare}"]`);
+  if (!squareEl) return;
+  
+  // Mark the square with a class for easier selection and cleanup
+  squareEl.classList.add('peek-source-square');
+  
+  // 1. First try using the class-based approach as it's most efficient
+  // CSS will handle the opacity through the class
+  
+  // 2. As a fallback, also find direct piece elements and set opacity
+  const pieceLayers = squareEl.querySelectorAll('.piece, .draggable-source');
+  if (pieceLayers.length > 0) {
+    pieceLayers.forEach(pieceLayer => {
+      pieceLayer.style.opacity = '0.3';
+    });
+    return; // If we found and updated pieces, we're done
+  }
+  
+  // 3. If still not successful, try the most specific approach
+  setChessPieceOpacity(sourceSquare, 0.3);
 }
 
 // Helper function to directly set opacity on SVG pieces in the chessboard
@@ -1636,52 +1706,48 @@ function resetChessPieceOpacity() {
 
 // Function to clear all peek visualizations
 function clearPeekVisualizations() {
-  // Reset all chess piece opacity using our helper function
-  resetChessPieceOpacity();
-
-  // Find any pieces that were made transparent and restore them
-  document.querySelectorAll('.cm-chessboard .board .piece').forEach(piece => {
-    if (piece.style.opacity !== '') {
-      piece.style.opacity = '';
-    }
-  });
+  // Use specific selectors instead of general ones for better performance
   
-  // Also clear any source square classes we added
-  document.querySelectorAll('.cm-chessboard .square.peek-source-square').forEach(square => {
-    square.classList.remove('peek-source-square');
-    // Find all elements within this square and reset their opacity
-    square.querySelectorAll('*').forEach(el => {
-      if (el.style.opacity !== '') {
-        el.style.opacity = '';
+  // 1. Remove ghost pieces - do this first as it's the most visible change
+  const ghostPieces = document.querySelectorAll('.peek-ghost-piece');
+  if (ghostPieces.length > 0) {
+    ghostPieces.forEach(ghost => {
+      if (ghost.parentNode) {
+        ghost.parentNode.removeChild(ghost);
       }
+    });
+  }
+  
+  // 2. Clear arrows
+  if (arrows) {
+    arrows.removeArrows();
+  }
+  
+  // 3. Reset source square opacity with the helper function
+  // which handles both class-based and inline style approaches
+  document.querySelectorAll('.peek-source-square').forEach(square => {
+    square.classList.remove('peek-source-square');
+    
+    // Find pieces within this square and reset opacity
+    const pieces = square.querySelectorAll('.piece, [style*="opacity"]');
+    pieces.forEach(piece => {
+      piece.style.opacity = '';
     });
   });
   
-  // Clean up any inline styles that might have been forcefully added
-  document.querySelectorAll('.cm-chessboard [style*="opacity"]').forEach(el => {
-    // Only reset if it's related to our peek functionality (not affecting other UI elements)
-    if (el.closest('.square') || el.classList.contains('piece') || el.classList.contains('draggable-source')) {
-      // Extract the current style and remove opacity
-      let style = el.getAttribute('style') || '';
-      style = style.replace(/opacity\s*:\s*[^;]+(!important)?;?/g, '');
-      if (style.trim()) {
-        el.setAttribute('style', style);
-      } else {
-        el.removeAttribute('style');
-      }
-    }
-  });
+  // 4. Reset all chess piece opacity using more targeted selectors
+  const pieceElements = document.querySelectorAll('.cm-chessboard .piece[style*="opacity"]');
+  if (pieceElements.length > 0) {
+    pieceElements.forEach(piece => {
+      piece.style.opacity = '';
+    });
+  }
   
-  // Remove any existing ghost pieces
-  document.querySelectorAll('.peek-ghost-piece').forEach(ghost => {
-    ghost.parentNode.removeChild(ghost);
-  });
-  
-  // Clear existing arrows if any
-  arrows.removeArrows();
-  
-  // Clear any peek square highlights
+  // 5. Clear peek highlights
   clearPeekHighlights();
+  
+  // Reset state variables to ensure clean slate
+  currentPeekArrow = null;
 }
 
 // Function to clear peek square highlights
