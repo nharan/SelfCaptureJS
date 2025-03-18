@@ -446,3 +446,275 @@ function createCaptureFlash(square) {
     boardContainer.removeChild(flashElement);
   }, 600);
 }
+
+// Share button functionality
+const shareButton = document.getElementById('shareButton');
+const downloadImageBtn = document.getElementById('downloadImage');
+const boardCanvas = document.getElementById('boardCanvas');
+let shareModal;
+
+// Initialize modal after DOM content is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  // Check if Bootstrap is available
+  if (typeof bootstrap !== 'undefined') {
+    shareModal = new bootstrap.Modal(document.getElementById('shareModal'));
+    
+    // Setup event listeners
+    shareButton.addEventListener('click', () => {
+      // Generate the board image
+      renderBoardDirectly();
+      // Show the modal
+      shareModal.show();
+    });
+  } else {
+    console.error("Bootstrap JavaScript not loaded. Modal functionality won't work.");
+    
+    // Fallback for when Bootstrap JS is not available
+    shareButton.addEventListener('click', () => {
+      alert("Sorry, the share functionality requires Bootstrap JavaScript which isn't loaded properly. Please refresh the page or try again later.");
+    });
+  }
+  
+  // Download button event listener
+  downloadImageBtn.addEventListener('click', () => {
+    downloadBoardImage();
+  });
+});
+
+// Function to directly render the chess board to canvas without html2canvas
+function renderBoardDirectly() {
+  const canvas = boardCanvas;
+  const ctx = canvas.getContext('2d');
+  
+  // Get board container dimensions for responsive sizing
+  const boardRect = document.getElementById('board').getBoundingClientRect();
+  
+  // Set canvas dimensions with some padding for the title
+  const padding = 60; // Space for the title
+  canvas.width = boardRect.width;
+  canvas.height = boardRect.width + padding;
+  
+  // Fill the background
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Add the title
+  ctx.fillStyle = '#5d4037';
+  ctx.font = 'bold 24px "Playfair Display", serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('fairchess.com', canvas.width / 2, 35);
+  
+  // Board colors
+  const lightColor = '#f0d9b5';
+  const darkColor = '#b58863';
+  const borderColor = '#5d4037';
+  
+  // Get current game position
+  const position = game.getFEN().split(' ')[0];
+  const boardOrientation = board.getOrientation();
+  
+  // Draw the outer border
+  ctx.fillStyle = borderColor;
+  ctx.fillRect(0, padding, canvas.width, canvas.width);
+  
+  // Draw inner board (slightly smaller to create border effect)
+  const borderWidth = Math.max(4, canvas.width * 0.01);
+  const innerWidth = canvas.width - borderWidth * 2;
+  const squareSize = innerWidth / 8;
+  
+  // Parse FEN position
+  const rows = position.split('/');
+  
+  // For mapping pieces to image files
+  const pieceMap = {
+    'p': 'bP', 'n': 'bN', 'b': 'bB', 'r': 'bR', 'q': 'bQ', 'k': 'bK',
+    'P': 'wP', 'N': 'wN', 'B': 'wB', 'R': 'wR', 'Q': 'wQ', 'K': 'wK'
+  };
+  
+  // Draw the board squares and coordinates
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      // Adjust for board orientation
+      const displayRow = boardOrientation === 'w' ? 7 - row : row;
+      const displayCol = boardOrientation === 'w' ? col : 7 - col;
+      
+      const isLight = (displayRow + displayCol) % 2 === 0;
+      ctx.fillStyle = isLight ? lightColor : darkColor;
+      
+      const x = displayCol * squareSize + borderWidth;
+      const y = displayRow * squareSize + padding + borderWidth;
+      
+      // Draw square
+      ctx.fillRect(x, y, squareSize, squareSize);
+      
+      // Draw coordinates
+      if (displayRow === 7) {
+        // Files (a-h)
+        ctx.fillStyle = isLight ? darkColor : lightColor;
+        ctx.font = `${squareSize * 0.2}px Arial`;
+        ctx.textAlign = 'left';
+        const file = boardOrientation === 'w' ? 
+          String.fromCharCode(97 + displayCol) : 
+          String.fromCharCode(97 + (7 - displayCol));
+        ctx.fillText(file, x + 2, y + squareSize - 2);
+      }
+      
+      if (displayCol === 0) {
+        // Ranks (1-8)
+        ctx.fillStyle = isLight ? darkColor : lightColor;
+        ctx.font = `${squareSize * 0.2}px Arial`;
+        ctx.textAlign = 'left';
+        const rank = boardOrientation === 'w' ? 
+          String(8 - displayRow) : 
+          String(displayRow + 1);
+        ctx.fillText(rank, x + 2, y + squareSize * 0.2 + 2);
+      }
+    }
+  }
+  
+  // Preload all piece images
+  const pieceImages = {};
+  const imagePromises = [];
+  
+  for (const pieceChar in pieceMap) {
+    const imageName = pieceMap[pieceChar];
+    imagePromises.push(new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        pieceImages[pieceChar] = img;
+        resolve();
+      };
+      img.onerror = () => {
+        console.error(`Failed to load image for ${imageName}`);
+        reject();
+      };
+      img.src = `img/chesspieces/wikipedia/${imageName}.png`;
+    }));
+  }
+
+  // Show loading message
+  ctx.fillStyle = '#333333';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Loading pieces...', canvas.width / 2, padding - 10);
+  
+  // Wait for all images to load, then draw the pieces
+  Promise.all(imagePromises).then(() => {
+    // Clear the loading message
+    ctx.fillStyle = '#f5f5f5';
+    ctx.fillRect(0, padding - 20, canvas.width, 20);
+    
+    // Redraw the title
+    ctx.fillStyle = '#5d4037';
+    ctx.font = 'bold 24px "Playfair Display", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('fairchess.com', canvas.width / 2, 35);
+    
+    // Now draw the pieces using the loaded images
+    for (let row = 0; row < 8; row++) {
+      let col = 0;
+      const fenRow = rows[row];
+      
+      for (let i = 0; i < fenRow.length; i++) {
+        const char = fenRow.charAt(i);
+        
+        if (isNaN(char)) {
+          // It's a piece - draw the image
+          // Adjust for board orientation
+          const displayRow = boardOrientation === 'w' ? row : 7 - row;
+          const displayCol = boardOrientation === 'w' ? col : 7 - col;
+          
+          const x = displayCol * squareSize + borderWidth;
+          const y = displayRow * squareSize + padding + borderWidth;
+          
+          // Draw the piece image
+          const img = pieceImages[char];
+          if (img) {
+            const padding = squareSize * 0.1; // 10% padding
+            ctx.drawImage(img, 
+              x + padding, 
+              y + padding, 
+              squareSize - 2*padding, 
+              squareSize - 2*padding
+            );
+          }
+          
+          col++;
+        } else {
+          // It's a number - skip these many columns
+          col += parseInt(char);
+        }
+      }
+    }
+  }).catch(error => {
+    console.error("Error loading piece images:", error);
+    // Draw simple piece representations as fallback
+    drawSimplePieces(ctx, rows, squareSize, borderWidth, padding, boardOrientation);
+  });
+}
+
+// Fallback function to draw simple pieces if images fail to load
+function drawSimplePieces(ctx, rows, squareSize, borderWidth, padding, boardOrientation) {
+  for (let row = 0; row < 8; row++) {
+    let col = 0;
+    const fenRow = rows[row];
+    
+    for (let i = 0; i < fenRow.length; i++) {
+      const char = fenRow.charAt(i);
+      
+      if (isNaN(char)) {
+        // It's a piece
+        // Adjust for board orientation
+        const displayRow = boardOrientation === 'w' ? row : 7 - row;
+        const displayCol = boardOrientation === 'w' ? col : 7 - col;
+        
+        const x = displayCol * squareSize + borderWidth;
+        const y = displayRow * squareSize + padding + borderWidth;
+        
+        // Draw piece representation as a circle with letter
+        const pieceColor = char === char.toUpperCase() ? '#fff' : '#000';
+        const pieceBorder = char === char.toUpperCase() ? '#000' : '#fff';
+        const pieceType = char.toLowerCase();
+        
+        ctx.fillStyle = pieceColor;
+        ctx.strokeStyle = pieceBorder;
+        ctx.lineWidth = 1.5;
+        
+        // Draw circle with letter for the piece
+        ctx.beginPath();
+        ctx.arc(x + squareSize/2, y + squareSize/2, squareSize * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw piece letter
+        ctx.fillStyle = pieceBorder;
+        ctx.font = `bold ${squareSize * 0.4}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pieceType.toUpperCase(), x + squareSize/2, y + squareSize/2);
+        
+        col++;
+      } else {
+        // It's a number - skip these many columns
+        col += parseInt(char);
+      }
+    }
+  }
+}
+
+// Function to download the board image
+function downloadBoardImage() {
+  // Create a temporary link element
+  const link = document.createElement('a');
+  
+  // Set the download attributes
+  link.download = `fairchess-${new Date().toISOString().split('T')[0]}.png`;
+  
+  // Convert canvas content to data URL
+  link.href = boardCanvas.toDataURL('image/png');
+  
+  // Append to the document, click it, and remove it
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
