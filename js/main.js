@@ -546,17 +546,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Peek mode functionality - only process if enabled
     if (!peekModeEnabled) return;
     
-    // Only process new target squares to avoid redundant calculations
-    if (targetSquare === lastHoveredSquare) return;
-    
     // Check if this is a legal move
     const moves = game.getMovesAtSquare(dragSourceSquare);
     if (!moves || !moves.includes(targetSquare)) return;
     
-    // If we're switching to a new target square, clear previous visualizations
-    if (lastHoveredSquare !== null) {
-      clearPeekVisualizations();
-    }
+    // Only process if this is a different square than last time
+    if (targetSquare === lastHoveredSquare) return;
+    
+    // Ensure we completely clean up previous state before showing new one
+    clearPeekVisualizations();
+    resetChessPieceOpacity();
     
     // Update the last hovered square
     lastHoveredSquare = targetSquare;
@@ -564,18 +563,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Use throttling to prevent too many calculations
     const now = Date.now();
     if (isPeekCalculating || (lastPeekCalculationTime && (now - lastPeekCalculationTime) <= PEEK_THROTTLE_DELAY)) {
-      return; // Skip if we're already calculating or it's too soon
+      // Even if we're throttling actual calculations, we can still check the cache
+      // This makes the UX feel more responsive
+      const cacheKey = `${dragSourceSquare}_${targetSquare}`;
+      if (peekResultCache.has(cacheKey)) {
+        // We can use the cached result without waiting
+        const cachedResult = peekResultCache.get(cacheKey);
+        showPeekResult(cachedResult);
+        return;
+      }
+      return; // Skip if not in cache and we're still throttling
     }
     
     // Update the timestamp and set calculating flag
     lastPeekCalculationTime = now;
     isPeekCalculating = true;
-    
-    // Clear previous arrow if any
-    if (currentPeekArrow) {
-      arrows.removeArrows();
-      currentPeekArrow = null;
-    }
     
     // Use requestAnimationFrame for better performance
     requestAnimationFrame(() => {
@@ -1432,6 +1434,16 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
 
 // Helper function to show peek results from cache
 function showPeekResult(result) {
+  // First, ensure ALL previous transparency effects are completely cleared
+  // Not just removing ghost pieces, but also resetting ALL piece opacity
+  document.querySelectorAll('.cm-chessboard .piece[style*="opacity"]').forEach(piece => {
+    piece.style.opacity = '';
+  });
+  // Clear any peek source classes
+  document.querySelectorAll('.peek-source-square').forEach(sq => {
+    sq.classList.remove('peek-source-square');
+  });
+  
   // Set current peek arrow state
   currentPeekArrow = result;
   
@@ -1469,6 +1481,21 @@ function showGhostPiece(piece, square, type = 'player') {
     // If we already have a ghost piece for this square, just return
     return;
   }
+  
+  // Clear any existing source piece transparency
+  // This ensures we only have transparency on the squares directly related to the current ghost piece
+  document.querySelectorAll('.peek-source-square').forEach(square => {
+    // Only remove if not related to current peek arrow
+    const squareCoord = square.getAttribute('data-square');
+    if ((type === 'player' && currentPeekArrow?.playerFrom !== squareCoord) ||
+        (type === 'ai' && currentPeekArrow?.aiFrom !== squareCoord) ||
+        (type === 'ai-secondary' && currentPeekArrow?.aiRookFrom !== squareCoord)) {
+      square.classList.remove('peek-source-square');
+      square.querySelectorAll('[style*="opacity"]').forEach(el => {
+        el.style.opacity = '';
+      });
+    }
+  });
   
   // Create a ghost piece element
   const ghostPiece = document.createElement('div');
@@ -1764,3 +1791,30 @@ function clearPeekHighlights() {
     sq.classList.remove('peek-target');
   });
 }
+
+// Function to clear the peek cache when board position changes
+function clearPeekCache() {
+  // Clear the peek result cache when the board position changes
+  // This avoids stale results when the game state changes
+  peekResultCache.clear();
+  
+  // Also reset any ongoing peek state
+  isPeekCalculating = false;
+  lastPeekCalculationTime = null;
+  currentPeekArrow = null;
+  lastHoveredSquare = null;
+}
+
+// Add event listeners to clear cache when position changes
+makeMove.addEventListener("click", clearPeekCache);
+reset.addEventListener("click", clearPeekCache);
+
+// Clear cache when any move is made through the board interface
+const originalValidateMoveInput = window.inputHandler;
+window.inputHandler = function(event) {
+  if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
+    // Clear cache when a move is made on the board
+    clearPeekCache();
+  }
+  return originalValidateMoveInput(event);
+};
