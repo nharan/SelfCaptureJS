@@ -123,6 +123,13 @@ function inputHandler(event) {
         if (result) {
           selectedPiece = null;
           event.chessboard.disableMoveInput();
+          
+          // Check if this was a self-capture (indicated by 'x' in move notation)
+          if (result.includes('x')) {
+            // Create a visual flash effect on the square
+            createCaptureFlash(event.square);
+          }
+          
           event.chessboard.state.moveInputProcess.then(() => {
             event.chessboard.setPosition(game.getFEN(), true).then(() => {
               // Determine what sound to play based on the move
@@ -186,6 +193,13 @@ function inputHandler(event) {
     selectedPiece = null;
     if (result) {
       event.chessboard.disableMoveInput();
+      
+      // Check if this was a self-capture (indicated by 'x' in move notation)
+      if (result.includes('x')) {
+        // Create a visual flash effect on the square
+        createCaptureFlash(event.squareTo);
+      }
+      
       event.chessboard.state.moveInputProcess.then(() => {
         event.chessboard.setPosition(game.getFEN(), true).then(() => {
           // Determine what sound to play based on the move
@@ -390,3 +404,45 @@ stopAiVsAi.addEventListener("click", stopAiVsAiMatch);
 soundToggle.addEventListener("change", () => {
   soundEnabled = soundToggle.checked;
 });
+
+// Function to create a visual flash effect on a square when a capture occurs
+function createCaptureFlash(square) {
+  // Get the board container element
+  const boardContainer = document.querySelector('.board-container');
+  
+  // Get the board position and size
+  const boardRect = document.getElementById('board').getBoundingClientRect();
+  const boardSize = boardRect.width;
+  const squareSize = boardSize / 8;
+  
+  // Calculate the position for the flash effect
+  const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
+  const rank = 8 - parseInt(square.charAt(1));
+  
+  // Create flash element
+  const flashElement = document.createElement('div');
+  flashElement.className = 'self-capture-flash';
+  flashElement.style.left = (file * squareSize) + 'px';
+  flashElement.style.top = (rank * squareSize) + 'px';
+  flashElement.style.width = squareSize + 'px';
+  flashElement.style.height = squareSize + 'px';
+  
+  // Add to board
+  boardContainer.appendChild(flashElement);
+  
+  // Apply the glow effect to the square in the chessboard
+  const svgSquares = document.querySelectorAll('.cm-chessboard .board .square');
+  svgSquares.forEach(squareElement => {
+    if (squareElement.getAttribute('data-square') === square) {
+      squareElement.style.animation = 'selfCaptureGlow 0.6s ease-out';
+      setTimeout(() => {
+        squareElement.style.animation = '';
+      }, 600);
+    }
+  });
+  
+  // Remove the flash element after animation completes
+  setTimeout(() => {
+    boardContainer.removeChild(flashElement);
+  }, 600);
+}

@@ -28,6 +28,42 @@
   position: relative;
 }
 
+/* Self-capture effect animation */
+@keyframes selfCaptureGlow {
+  0% {
+    filter: brightness(1) drop-shadow(0 0 0 gold);
+  }
+  50% {
+    filter: brightness(2) drop-shadow(0 0 15px gold);
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0 gold);
+  }
+}
+
+@keyframes selfCaptureFlash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.self-capture-flash {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  background-color: gold;
+  opacity: 0;
+  z-index: 90;
+  pointer-events: none;
+  animation: selfCaptureFlash 0.6s ease-out;
+}
+
 /* Improve overall UI */
 body {
   font-family: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
