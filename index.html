@@ -24,6 +24,41 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Import and link CSS files -->
+    <link href="assets/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="assets/dist/css/bootstrap.icons.css" rel="stylesheet" />
+    <link href="assets/styles/cm-chessboard.css" rel="stylesheet" />
+    <link href="cm-chessboard/extensions/arrows/assets/arrows.css" rel="stylesheet" />
+    <link href="assets/styles/styles.css" rel="stylesheet" />
+    
+    <style>
+      /* Visual flash effect for self-capture on squares */
+      @keyframes selfCaptureGlow {
+        0% { fill-opacity: 0.5; fill: red; }
+        100% { fill-opacity: 0; fill: inherit; }
+      }
+      
+      .self-capture-flash {
+        position: absolute;
+        background-color: rgba(255, 0, 0, 0.5);
+        border-radius: 5%;
+        pointer-events: none;
+        animation: flashAnimation 0.6s ease-out;
+        z-index: 10;
+      }
+      
+      /* Peek mode styles */
+      .cm-chessboard .arrow-danger .arrow-head {
+        fill: #dc3545;
+      }
+      
+      .cm-chessboard .arrow-danger .arrow-line {
+        stroke: #dc3545;
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+    </style>
   </head>
   <body class="d-flex flex-column h-100">
     <!-- Begin page content -->
@@ -93,6 +128,30 @@
             >
               Stop AI Match
             </button>
+<<<<<<< Updated upstream
+=======
+            <button
+              type="button"
+              class="btn btn-outline-secondary me-2 mb-2"
+              id="shareButton"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-share" viewBox="0 0 16 16">
+                <path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.499 2.499 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5zm-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>
+              </svg>
+              Share
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-info me-2 mb-2"
+              id="peekButton"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
+                <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
+              </svg>
+              Peek
+            </button>
+>>>>>>> Stashed changes
             <div class="flex-grow-1 d-sm-flex d-none mb-2">
               <div class="input-group">
                 <label class="input-group-text" for="thinkingTime"
