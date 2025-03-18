@@ -107,6 +107,7 @@ let selectedPiece = null;
 board.enableMoveInput(inputHandler);
 
 function inputHandler(event) {
+  console.log("DEBUG - Received event type:", event.type, "Square:", event.square, "Selected:", selectedPiece);
   event.chessboard.removeMarkers(MARKER_TYPE.dot);
   if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
     // Play click sound when a piece is clicked
@@ -135,11 +136,6 @@ function inputHandler(event) {
               } else {
                 playSound('move');
               }
-              
-              /* Commented out evaluation-based sound
-              const evaluation = game.evaluatePosition();
-              playSoundFeedback(evaluation);
-              */
               
               event.chessboard.enableMoveInput(inputHandler);
               setTimeout(() => {
@@ -170,6 +166,7 @@ function inputHandler(event) {
     // No piece selected or invalid destination - try to select a new piece
     const moves = game.getMovesAtSquare(event.square);
     if (moves.length > 0) {
+      console.log("Selecting piece at", event.square);
       selectedPiece = event.square;
       for (const move of moves) {
         event.chessboard.addMarker(MARKER_TYPE.dot, move);
@@ -177,6 +174,12 @@ function inputHandler(event) {
       return true;
     }
     selectedPiece = null;
+    return false;
+  } else if (event.type === INPUT_EVENT_TYPE.moveInputCanceled) {
+    // Handle deselection when move is canceled
+    console.log("Deselecting piece due to move cancel");
+    selectedPiece = null;
+    event.chessboard.removeMarkers(MARKER_TYPE.dot);
     return false;
   } else if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
     const result = game.move(event.squareFrom, event.squareTo);
