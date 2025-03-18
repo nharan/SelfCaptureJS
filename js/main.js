@@ -99,13 +99,160 @@ const board = new Chessboard(document.getElementById("board"), {
   }
 });
 
-updateStatus();
+// Add CSS for self-capture highlight
+const selfCaptureStyle = document.createElement('style');
+selfCaptureStyle.textContent = `
+  /* Add hover highlight to squares with same color pieces */
+  .cm-chessboard .square.self-capture-highlight {
+    fill: rgba(255, 0, 0, 0.5) !important;
+  }
+`;
+document.head.appendChild(selfCaptureStyle);
 
-// Track if we have a piece selected
-let selectedPiece = null;
+// Track which piece is being dragged and from where
+let draggedPieceSquare = null;
+let draggedPieceColor = null;
 
-board.enableMoveInput(inputHandler);
+// Listen for board events to implement self-capture highlighting
+// This function doesn't exist in the CM-Chessboard library - commented out to fix error
+// board.addPositionChangeListener((oldFen, newFen) => {
+//   // Reset highlights when board position changes
+//   removeAllHighlights();
+// });
 
+// Helper function to check if a square has same color piece as dragged piece
+function shouldHighlightForSelfCapture(targetSquare) {
+  if (!draggedPieceSquare || !draggedPieceColor) return false;
+  
+  // Get the piece at the target square
+  const position = game.getFEN().split(' ')[0];
+  const targetPiece = getPieceAtSquare(position, targetSquare);
+  
+  // If there's a piece and it's the same color as the dragged piece
+  if (targetPiece) {
+    const targetColor = targetPiece === targetPiece.toUpperCase() ? 'w' : 'b';
+    return targetColor === draggedPieceColor;
+  }
+  
+  return false;
+}
+
+// Remove all self-capture highlights
+function removeAllHighlights() {
+  document.querySelectorAll('.square.self-capture-highlight').forEach(square => {
+    square.classList.remove('self-capture-highlight');
+  });
+}
+
+// Add custom input handler for the board
+function customBoardInputHandler(event) {
+  // Call the original input handler
+  const result = inputHandler(event);
+  
+  // Handle drag start - track which piece is being dragged
+  if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+    const position = game.getFEN().split(' ')[0];
+    const pieceAtSquare = getPieceAtSquare(position, event.square);
+    
+    if (pieceAtSquare) {
+      draggedPieceSquare = event.square;
+      draggedPieceColor = pieceAtSquare === pieceAtSquare.toUpperCase() ? 'w' : 'b';
+      console.log(`Dragging ${draggedPieceColor} piece from ${draggedPieceSquare}`);
+    }
+  }
+  
+  return result;
+}
+
+// Modify the board to use our custom input handler
+board.enableMoveInput(customBoardInputHandler);
+
+// Add the highlighting functionality in a safe way
+document.addEventListener('DOMContentLoaded', () => {
+  // Poll for SVG elements since they might not be immediately available
+  const checkForBoardSquares = setInterval(() => {
+    const squares = document.querySelectorAll('.cm-chessboard .board .square');
+    
+    if (squares.length > 0) {
+      clearInterval(checkForBoardSquares);
+      
+      // Track piece dragging state
+      let isDragging = false;
+      let dragSourceSquare = null;
+      let dragSourceColor = null;
+      
+      // Monitor draggable piece to detect when drag starts/ends
+      const dragObserver = new MutationObserver((mutations) => {
+        const draggablePiece = document.querySelector('.cm-chessboard-draggable-piece');
+        
+        if (draggablePiece && !isDragging) {
+          // Drag has started
+          isDragging = true;
+          
+          // Find which square was the source
+          const boardState = game.getFEN().split(' ')[0];
+          // Get currently clicked square from most recent moveInputStarted event
+          if (lastEventSquare) {
+            dragSourceSquare = lastEventSquare;
+            const pieceAtSquare = getPieceAtSquare(boardState, lastEventSquare);
+            if (pieceAtSquare) {
+              dragSourceColor = pieceAtSquare === pieceAtSquare.toUpperCase() ? 'w' : 'b';
+            }
+          }
+        } else if (!draggablePiece && isDragging) {
+          // Drag has ended
+          isDragging = false;
+          dragSourceSquare = null;
+          dragSourceColor = null;
+          
+          // Clean up any highlights
+          squares.forEach(sq => {
+            sq.classList.remove('self-capture-highlight');
+          });
+        }
+      });
+      
+      // Start observing DOM for the draggable piece
+      dragObserver.observe(document.body, { 
+        childList: true, 
+        subtree: true 
+      });
+      
+      // Add mouseover/mouseout event handlers to highlight during drag
+      squares.forEach(square => {
+        square.addEventListener('mouseover', () => {
+          if (isDragging && dragSourceSquare) {
+            const targetSquare = square.getAttribute('data-square');
+            
+            // Don't highlight the source square
+            if (targetSquare === dragSourceSquare) return;
+            
+            const position = game.getFEN().split(' ')[0];
+            const targetPiece = getPieceAtSquare(position, targetSquare);
+            
+            // If there's a piece and it's the same color as the dragged piece
+            if (targetPiece) {
+              const targetColor = targetPiece === targetPiece.toUpperCase() ? 'w' : 'b';
+              if (targetColor === dragSourceColor) {
+                square.classList.add('self-capture-highlight');
+              }
+            }
+          }
+        });
+        
+        square.addEventListener('mouseout', () => {
+          square.classList.remove('self-capture-highlight');
+        });
+      });
+    }
+  }, 200); // Check every 200ms
+});
+
+// Track the last square clicked to help with drag detection
+let lastEventSquare = null;
+
+// Helper function for the input handler to track moves
+const originalInputHandler = inputHandler;
 function inputHandler(event) {
   console.log("DEBUG - Received event type:", event.type, "Square:", event.square, "Selected:", selectedPiece);
   event.chessboard.removeMarkers(MARKER_TYPE.dot);
@@ -244,6 +391,116 @@ function inputHandler(event) {
     return result;
   }
 }
+
+// Helper function to extract piece at specific square from FEN
+function getPieceAtSquare(fenPosition, square) {
+  const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
+  const rank = 8 - parseInt(square.charAt(1));
+  
+  const rows = fenPosition.split('/');
+  if (rank < 0 || rank >= rows.length) return null;
+  
+  const row = rows[rank];
+  
+  let col = 0;
+  for (let i = 0; i < row.length; i++) {
+    const char = row.charAt(i);
+    
+    if (isNaN(char)) {
+      // It's a piece
+      if (col === file) {
+        return char;
+      }
+      col++;
+    } else {
+      // It's a number - skip these many columns
+      col += parseInt(char);
+    }
+  }
+  
+  return null;
+}
+
+updateStatus();
+
+// Track if we have a piece selected
+let selectedPiece = null;
+
+// Initialize the board with standard input handler
+board.enableMoveInput(inputHandler);
+
+// Add self-capture highlighting
+document.addEventListener('DOMContentLoaded', () => {
+  // Track last clicked square for drag source detection
+  let dragSourceSquare = null;
+  
+  // Event listener to capture the start of drag
+  const originalInputHandler = window.inputHandler;
+  window.inputHandler = function(event) {
+    if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+      dragSourceSquare = event.square;
+    }
+    return inputHandler(event);
+  };
+  
+  // Track the start of drag operations
+  document.addEventListener('mousedown', (e) => {
+    const target = e.target;
+    if (target && target.classList.contains('square')) {
+      dragSourceSquare = target.getAttribute('data-square');
+    }
+  });
+  
+  // Mouse move listener to highlight potential self-captures
+  document.addEventListener('mousemove', (e) => {
+    // Check if we're dragging
+    const draggablePiece = document.querySelector('.cm-chessboard-draggable-piece');
+    if (!draggablePiece || !dragSourceSquare) return;
+    
+    // Hide draggable piece temporarily to find element below
+    const originalStyle = draggablePiece.style.display;
+    draggablePiece.style.display = 'none';
+    const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+    draggablePiece.style.display = originalStyle;
+    
+    // Clear any existing highlights
+    document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
+      sq.classList.remove('self-capture-highlight');
+    });
+    
+    // Check if we're over a board square
+    if (elemBelow && elemBelow.classList.contains('square')) {
+      const targetSquare = elemBelow.getAttribute('data-square');
+      
+      // Don't highlight the source square
+      if (targetSquare && targetSquare !== dragSourceSquare) {
+        // Check if this is a potential self-capture
+        const position = game.getFEN().split(' ')[0];
+        const sourcePiece = getPieceAtSquare(position, dragSourceSquare);
+        const targetPiece = getPieceAtSquare(position, targetSquare);
+        
+        if (sourcePiece && targetPiece) {
+          // Check if same color
+          const sourceIsWhite = sourcePiece === sourcePiece.toUpperCase();
+          const targetIsWhite = targetPiece === targetPiece.toUpperCase();
+          
+          if (sourceIsWhite === targetIsWhite) {
+            // Add highlight for potential self-capture
+            elemBelow.classList.add('self-capture-highlight');
+          }
+        }
+      }
+    }
+  });
+  
+  // Clear highlights when drag ends
+  document.addEventListener('mouseup', () => {
+    dragSourceSquare = null;
+    document.querySelectorAll('.cm-chessboard .square.self-capture-highlight').forEach(sq => {
+      sq.classList.remove('self-capture-highlight');
+    });
+  });
+});
 
 // Check board status
 function updateStatus() {
