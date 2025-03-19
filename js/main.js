@@ -1313,25 +1313,163 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
       // Log the position after player's move
       const afterPlayerMoveFEN = game.getFEN();
       
+      // Add a DOM element to capture console logs
+      const logCapture = document.createElement('div');
+      logCapture.id = 'peek-log-capture';
+      logCapture.style.display = 'none';
+      document.body.appendChild(logCapture);
+      
+      // Capture console.log output temporarily
+      const originalConsoleLog = console.log;
+      console.log = function() {
+        // Call the original console.log
+        originalConsoleLog.apply(console, arguments);
+        
+        // Capture the log message
+        const logMessage = Array.from(arguments).join(' ');
+        const logEntry = document.createElement('div');
+        logEntry.textContent = logMessage;
+        logCapture.appendChild(logEntry);
+      };
+      
       // If move is valid, calculate AI's response
       const aiMoveResult = game.makeAIMove();
+      
+      // Restore original console.log
+      console.log = originalConsoleLog;
+      
+      // Extract engine logs and look for "Best:" moves
+      const engineLogs = Array.from(logCapture.children)
+        .map(node => node.textContent)
+        .filter(text => text.includes('Best:'));
+      
+      // Remove the log capture element
+      document.body.removeChild(logCapture);
       
       // Get the position after AI's move
       const afterAIMoveFEN = game.getFEN();
       
       if (aiMoveResult) {
-        // Use our detection function to find the actual squares that changed
-        const actualMove = detectActualMove(afterPlayerMoveFEN, afterAIMoveFEN);
+        // First try to extract the move directly from engine log using regex
+        let capturedBestMove = false;
+        let aiFromSquare, aiToSquare;
+        let isCapture = false;
+        
+        // Try to find the deepest search with a Best move
+        if (engineLogs.length > 0) {
+          console.log(`[PEEK] Found ${engineLogs.length} engine logs with Best move`);
+          
+          // Sort by depth (D:4 is deeper than D:1)
+          engineLogs.sort((a, b) => {
+            const depthA = parseInt(a.match(/D:(\d+)/)?.[1] || "0");
+            const depthB = parseInt(b.match(/D:(\d+)/)?.[1] || "0");
+            return depthB - depthA; // Sort by descending depth
+          });
+          
+          // Get the deepest search result
+          const deepestLog = engineLogs[0];
+          console.log(`[PEEK] Using deepest engine log: ${deepestLog}`);
+          
+          // Extract the best move using regex
+          const bestMoveMatch = deepestLog.match(/Best:([a-h][1-8][a-h][1-8])/);
+          if (bestMoveMatch && bestMoveMatch.length > 1) {
+            const bestMove = bestMoveMatch[1];
+            aiFromSquare = bestMove.substring(0, 2);
+            aiToSquare = bestMove.substring(2, 4);
+            console.log(`[PEEK] Extracted AI move from engine logs: ${aiFromSquare} to ${aiToSquare}`);
+            
+            // Check if this is a capture by seeing if there's a piece at the destination
+            const targetPiece = getPieceAtSquare(afterPlayerMoveFEN, aiToSquare);
+            if (targetPiece) {
+              isCapture = true;
+              console.log(`[PEEK] Detected that AI move is a capture - target square ${aiToSquare} has piece ${targetPiece}`);
+            }
+            
+            capturedBestMove = true;
+          }
+        }
+        
+        // Fallback to traditional move detection if we couldn't parse the Best move
+        if (!capturedBestMove) {
+          console.log("[PEEK] Falling back to move detection from board differences");
+          
+          // Use our detection function to find the actual squares that changed
+          const actualMove = detectActualMove(afterPlayerMoveFEN, afterAIMoveFEN);
+          
+          // Restore the original position
+          game.setFEN(currentFEN);
+          
+          if (actualMove) {
+            aiFromSquare = actualMove.from;
+            aiToSquare = actualMove.to;
+            
+            // Check if this was a capture by looking for a piece at the destination in the previous position
+            const targetPiece = getPieceAtSquare(afterPlayerMoveFEN, aiToSquare);
+            if (targetPiece) {
+              isCapture = true;
+              console.log(`[PEEK] Detected capture from board differences - target square ${aiToSquare} had piece ${targetPiece}`);
+            }
+          } else {
+            // Fallback method if detection fails
+            if (aiMoveResult === "O-O" || aiMoveResult === "O-O-O") {
+              // Handle castling
+              const side = afterPlayerMoveFEN.split(' ')[1]; // 'w' or 'b'
+              
+              if (side === 'w') {
+                aiFromSquare = 'e1';
+                aiToSquare = aiMoveResult === "O-O" ? 'g1' : 'c1';
+              } else {
+                aiFromSquare = 'e8';
+                aiToSquare = aiMoveResult === "O-O" ? 'g8' : 'c8';
+              }
+              
+              // Update the peek state and result object
+              currentPeekArrow.isCastling = true;
+              peekResult.isCastling = true;
+              
+              // Also handle rook movement for castling
+              const rookFromSquare = aiMoveResult === "O-O" ? 
+                (side === 'w' ? 'h1' : 'h8') : 
+                (side === 'w' ? 'a1' : 'a8');
+              const rookToSquare = aiMoveResult === "O-O" ? 
+                (side === 'w' ? 'f1' : 'f8') : 
+                (side === 'w' ? 'd1' : 'd8');
+              const rookPiece = side === 'w' ? 'R' : 'r';
+              
+              // Update the peek state and result object with rook info
+              currentPeekArrow.aiRookFrom = rookFromSquare;
+              currentPeekArrow.aiRookTo = rookToSquare;
+              currentPeekArrow.aiRookPiece = rookPiece;
+              
+              peekResult.aiRookFrom = rookFromSquare;
+              peekResult.aiRookTo = rookToSquare;
+              peekResult.aiRookPiece = rookPiece;
+            } else {
+              // Handle normal moves and captures
+              const movePattern = /([a-h][1-8])([-x])([a-h][1-8])/;
+              const match = aiMoveResult.match(movePattern);
+              
+              if (match && match.length === 4) {
+                aiFromSquare = match[1];
+                aiToSquare = match[3];
+                
+                // Check if this is a capture
+                isCapture = match[2] === 'x';
+              }
+            }
+          }
+        }
+        
+        // Save capture state
+        currentPeekArrow.isCapture = isCapture;
+        peekResult.isCapture = isCapture;
         
         // Restore the original position
         game.setFEN(currentFEN);
         
-        if (actualMove) {
-          const aiFromSquare = actualMove.from;
-          const aiToSquare = actualMove.to;
-          
-          // Get the AI piece that would move
-          const aiPiece = getPieceAtSquare(afterPlayerMoveFEN, aiFromSquare);
+        // Get the AI piece at the source square
+        if (aiFromSquare && aiToSquare) {
+          const aiPiece = getPieceAtSquare(position, aiFromSquare);
           
           if (aiPiece) {
             // Update the peek state with AI move information
@@ -1346,85 +1484,10 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
             
             // Show a ghost of the AI's piece at its destination
             showGhostPiece(aiPiece, aiToSquare, 'ai');
-          }
-        } else {
-          // Fallback method if detection fails
-          let aiFromSquare, aiToSquare, aiPiece;
-          
-          // Handle castling
-          if (aiMoveResult === "O-O" || aiMoveResult === "O-O-O") {
-            // For castling, we need to determine the squares based on the side to move
-            const side = afterPlayerMoveFEN.split(' ')[1]; // 'w' or 'b'
             
-            if (side === 'w') {
-              aiFromSquare = 'e1';
-              aiToSquare = aiMoveResult === "O-O" ? 'g1' : 'c1';
-              aiPiece = 'K'; // White king
-            } else {
-              aiFromSquare = 'e8';
-              aiToSquare = aiMoveResult === "O-O" ? 'g8' : 'c8';
-              aiPiece = 'k'; // Black king
-            }
-            
-            // Update the peek state and result object
-            currentPeekArrow.aiFrom = aiFromSquare;
-            currentPeekArrow.aiTo = aiToSquare;
-            currentPeekArrow.aiPiece = aiPiece;
-            currentPeekArrow.isCastling = true;
-            
-            peekResult.aiFrom = aiFromSquare;
-            peekResult.aiTo = aiToSquare;
-            peekResult.aiPiece = aiPiece;
-            peekResult.isCastling = true;
-            
-            // Show a ghost of the AI's king at its destination
-            showGhostPiece(aiPiece, aiToSquare, 'ai');
-            
-            // Also show rook movement for castling
-            const rookFromSquare = aiMoveResult === "O-O" ? 
-              (side === 'w' ? 'h1' : 'h8') : 
-              (side === 'w' ? 'a1' : 'a8');
-            const rookToSquare = aiMoveResult === "O-O" ? 
-              (side === 'w' ? 'f1' : 'f8') : 
-              (side === 'w' ? 'd1' : 'd8');
-            const rookPiece = side === 'w' ? 'R' : 'r';
-            
-            // Update the peek state and result object with rook info
-            currentPeekArrow.aiRookFrom = rookFromSquare;
-            currentPeekArrow.aiRookTo = rookToSquare;
-            currentPeekArrow.aiRookPiece = rookPiece;
-            
-            peekResult.aiRookFrom = rookFromSquare;
-            peekResult.aiRookTo = rookToSquare;
-            peekResult.aiRookPiece = rookPiece;
-            
-            // Show ghost of the rook
-            showGhostPiece(rookPiece, rookToSquare, 'ai-secondary');
-          } else {
-            // Handle normal moves and captures
-            const movePattern = /([a-h][1-8])([-x])([a-h][1-8])/;
-            const match = aiMoveResult.match(movePattern);
-            
-            if (match && match.length === 4) {
-              aiFromSquare = match[1];
-              aiToSquare = match[3];
-              
-              // Get the AI piece that would move
-              aiPiece = getPieceAtSquare(afterPlayerMoveFEN, aiFromSquare);
-              
-              if (aiPiece) {
-                // Update the peek state and result object
-                currentPeekArrow.aiFrom = aiFromSquare;
-                currentPeekArrow.aiTo = aiToSquare;
-                currentPeekArrow.aiPiece = aiPiece;
-                
-                peekResult.aiFrom = aiFromSquare;
-                peekResult.aiTo = aiToSquare;
-                peekResult.aiPiece = aiPiece;
-                
-                // Show a ghost of the AI's piece at its destination
-                showGhostPiece(aiPiece, aiToSquare, 'ai');
-              }
+            // If this is castling, also show the rook move
+            if (currentPeekArrow.isCastling && currentPeekArrow.aiRookPiece) {
+              showGhostPiece(currentPeekArrow.aiRookPiece, currentPeekArrow.aiRookTo, 'ai-secondary');
             }
           }
         }
@@ -1452,6 +1515,8 @@ function simulateMoveAndShowResponse(fromSquare, toSquare) {
 
 // Helper function to show peek results from cache
 function showPeekResult(result) {
+  console.log(`[PEEK] Showing peek result from cache:`, JSON.stringify(result));
+  
   // First, ensure ALL previous transparency effects are completely cleared
   // Not just removing ghost pieces, but also resetting ALL piece opacity
   document.querySelectorAll('.cm-chessboard .piece[style*="opacity"]').forEach(piece => {
@@ -1483,9 +1548,17 @@ function showPeekResult(result) {
 
 // Function to show a ghost piece at a specific square
 function showGhostPiece(piece, square, type = 'player') {
+  // Check if this move is a capture by the AI
+  const isCapture = type === 'ai' && currentPeekArrow?.isCapture === true;
+  console.log(`[PEEK] Showing ghost piece: ${piece} at ${square}, type: ${type}, is${isCapture ? '' : ' not'} a capture`);
+  console.log(`[PEEK] Current peek data:`, JSON.stringify(currentPeekArrow));
+  
   // Find the target square
   const targetSquare = document.querySelector(`.cm-chessboard .board .square[data-square="${square}"]`);
-  if (!targetSquare) return;
+  if (!targetSquare) {
+    console.log(`[PEEK] Target square element not found: ${square}`);
+    return;
+  }
   
   // Get the board size and calculate the piece size
   const boardEl = document.getElementById('board');
@@ -1496,6 +1569,7 @@ function showGhostPiece(piece, square, type = 'player') {
   // Check if there's already a ghost piece for this square and type
   const existingGhost = document.querySelector(`.peek-ghost-piece.peek-${type}[data-square="${square}"]`);
   if (existingGhost) {
+    console.log(`[PEEK] Ghost piece already exists for ${square}, type ${type}`);
     // If we already have a ghost piece for this square, just return
     return;
   }
@@ -1595,22 +1669,33 @@ function showGhostPiece(piece, square, type = 'player') {
     
     if (type === 'player' && currentPeekArrow?.playerFrom) {
       sourceSquare = currentPeekArrow.playerFrom;
+      console.log(`[PEEK] Using player source square: ${sourceSquare}`);
     } else if (type === 'ai' && currentPeekArrow?.aiFrom) {
       sourceSquare = currentPeekArrow.aiFrom;
+      const moveType = isCapture ? "capture" : "move";
+      console.log(`[PEEK] Using AI source square: ${sourceSquare}, moveType: ${moveType}`);
     } else if (type === 'ai-secondary' && currentPeekArrow?.aiRookFrom) {
       sourceSquare = currentPeekArrow.aiRookFrom;
+      console.log(`[PEEK] Using AI rook source square: ${sourceSquare}`);
     }
     
     if (sourceSquare) {
       fadeSourcePiece(sourceSquare);
+    } else {
+      console.log(`[PEEK] No source square found for ${type} ghost piece`);
     }
   }
 }
 
 // Split out the piece fading to a separate function for better performance
 function fadeSourcePiece(sourceSquare) {
+  console.log(`[PEEK] Attempting to fade source piece at ${sourceSquare}`);
+  
   const squareEl = document.querySelector(`.cm-chessboard .board .square[data-square="${sourceSquare}"]`);
-  if (!squareEl) return;
+  if (!squareEl) {
+    console.log(`[PEEK] Square element not found for ${sourceSquare}`);
+    return;
+  }
   
   // Mark the square with a class for easier selection and cleanup
   squareEl.classList.add('peek-source-square');
@@ -1621,11 +1706,15 @@ function fadeSourcePiece(sourceSquare) {
   // 2. As a fallback, also find direct piece elements and set opacity
   const pieceLayers = squareEl.querySelectorAll('.piece, .draggable-source');
   if (pieceLayers.length > 0) {
+    console.log(`[PEEK] Found ${pieceLayers.length} direct piece layers to fade for ${sourceSquare}`);
     pieceLayers.forEach(pieceLayer => {
       pieceLayer.style.opacity = '0.3';
+      console.log(`[PEEK] Applied opacity 0.3 to piece layer: ${pieceLayer.className}`);
     });
     return; // If we found and updated pieces, we're done
   }
+  
+  console.log(`[PEEK] No direct piece layers found, using fallback approach for ${sourceSquare}`);
   
   // 3. If still not successful, try the most specific approach
   setChessPieceOpacity(sourceSquare, 0.3);
@@ -1633,56 +1722,75 @@ function fadeSourcePiece(sourceSquare) {
 
 // Helper function to directly set opacity on SVG pieces in the chessboard
 function setChessPieceOpacity(square, opacity) {
+  console.log(`[PEEK] Setting piece opacity for square ${square} to ${opacity}`);
+  
   // First, try the direct SVG use element approach (which is what CM-Chessboard uses)
   const pieceElements = document.querySelectorAll(`.cm-chessboard .board .square[data-square="${square}"] use, 
                                                    .cm-chessboard .board .square[data-square="${square}"] .piece,
                                                    .cm-chessboard .piece[data-square="${square}"]`);
   
   if (pieceElements.length > 0) {
-    pieceElements.forEach(element => {
+    console.log(`[PEEK] Found ${pieceElements.length} direct piece elements`);
+    pieceElements.forEach((element, index) => {
       // For SVG elements, we need to modify the style attribute
       if (element instanceof SVGElement) {
         // If it's an SVG element, we can use the style.opacity
         element.style.opacity = opacity;
+        console.log(`[PEEK] Set opacity on SVG element #${index}: ${element.tagName}`);
         
         // For 'use' elements in SVG, also try setting attributes directly
         if (element.tagName.toLowerCase() === 'use') {
           element.setAttribute('opacity', opacity);
+          console.log(`[PEEK] Also set opacity attribute on SVG use element #${index}`);
         }
       } else {
         // For regular HTML elements
         element.style.opacity = opacity;
+        console.log(`[PEEK] Set opacity on HTML element #${index}: ${element.tagName}${element.className ? ' class=' + element.className : ''}`);
       }
     });
+  } else {
+    console.log(`[PEEK] No direct piece elements found, trying piece layer`);
   }
   
   // Also try finding the piece via the piece layer in the chessboard
   const pieceLayer = document.querySelector(`.cm-chessboard .pieces .piece[data-square="${square}"]`);
   if (pieceLayer) {
     pieceLayer.style.opacity = opacity;
+    console.log(`[PEEK] Found and set opacity on piece layer for ${square}`);
     
     // If it has child SVG elements, set their opacity too
     const svgElements = pieceLayer.querySelectorAll('svg, use, g, path');
-    svgElements.forEach(svg => {
+    console.log(`[PEEK] Found ${svgElements.length} SVG child elements in piece layer`);
+    svgElements.forEach((svg, index) => {
       if (svg instanceof SVGElement) {
         svg.style.opacity = opacity;
         svg.setAttribute('opacity', opacity);
+        console.log(`[PEEK] Set opacity on SVG child element #${index}: ${svg.tagName}`);
       }
     });
+  } else {
+    console.log(`[PEEK] No piece layer found for ${square}, trying data-square selector`);
   }
   
   // One more approach - try finding any elements with the square attribute
-  document.querySelectorAll(`[data-square="${square}"]`).forEach(element => {
+  const dataSquareElements = document.querySelectorAll(`[data-square="${square}"]`);
+  console.log(`[PEEK] Found ${dataSquareElements.length} elements with data-square="${square}"`);
+  
+  dataSquareElements.forEach((element, index) => {
     // If it's a piece or contains a piece representation
     if (element.classList.contains('piece') || 
         element.querySelector('.piece') || 
         element.closest('.pieces')) {
       
       element.style.opacity = opacity;
+      console.log(`[PEEK] Set opacity on data-square element #${index}: ${element.tagName}${element.className ? ' class=' + element.className : ''}`);
       
       // Set opacity on all children
       const children = element.querySelectorAll('*');
-      children.forEach(child => {
+      console.log(`[PEEK] Found ${children.length} child elements to set opacity on`);
+      
+      children.forEach((child, childIndex) => {
         // Skip ghost pieces
         if (!child.closest('.peek-ghost-piece')) {
           child.style.opacity = opacity;
@@ -1690,6 +1798,9 @@ function setChessPieceOpacity(square, opacity) {
           // For SVG elements
           if (child instanceof SVGElement) {
             child.setAttribute('opacity', opacity);
+            if (childIndex < 5) { // Only log first few to avoid console spam
+              console.log(`[PEEK] Set opacity on child SVG element #${childIndex}: ${child.tagName}`);
+            }
           }
         }
       });
