@@ -299,11 +299,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Track the last square clicked to help with drag detection
 let lastEventSquare = null;
+let lastTouchSquare = null;
+let isTouchDragging = false;
 
 // Helper function for the input handler to track moves
 const originalInputHandler = inputHandler;
 function inputHandler(event) {
   console.log("DEBUG - Received event type:", event.type, "Square:", event.square, "Selected:", selectedPiece);
+  
+  // Track the square for our touch events handler
+  if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+    lastEventSquare = event.square;
+  }
+  
   event.chessboard.removeMarkers(MARKER_TYPE.dot);
   if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
     // Play click sound when a piece is clicked
@@ -492,16 +500,34 @@ document.addEventListener('DOMContentLoaded', () => {
     return inputHandler(event);
   };
   
-  // Track the start of drag operations
-  document.addEventListener('mousedown', (e) => {
-    const target = e.target;
-    if (target && target.classList.contains('square')) {
-      dragSourceSquare = target.getAttribute('data-square');
+  // Helper function to get coordinates from either mouse or touch event
+  function getEventCoordinates(event) {
+    // Touch event
+    if (event.touches && event.touches.length) {
+      return {
+        clientX: event.touches[0].clientX,
+        clientY: event.touches[0].clientY
+      };
     }
-  });
+    // Mouse event
+    return {
+      clientX: event.clientX,
+      clientY: event.clientY
+    };
+  }
   
-  // Mouse move listener to highlight potential self-captures
-  document.addEventListener('mousemove', (e) => {
+  // Helper function to get a square from coordinates
+  function getSquareFromCoordinates(x, y) {
+    // First check if there's a square element at these coordinates
+    const element = document.elementFromPoint(x, y);
+    if (element && element.classList.contains('square')) {
+      return element.getAttribute('data-square');
+    }
+    return null;
+  }
+  
+  // Helper function to process pointer movement (both mouse and touch)
+  function handlePointerMove(e) {
     // Only process if a piece is being dragged
     if (!dragSourceSquare) return;
     
@@ -509,9 +535,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const draggablePiece = document.querySelector('.cm-chessboard-draggable-piece');
     if (!draggablePiece) return;
     
-    // Use a more efficient approach to find the element under the cursor
-    // This avoids having to modify draggablePiece display which causes reflows
-    const elemBelow = elementFromPointWithDraggable(e.clientX, e.clientY, draggablePiece);
+    // Get coordinates regardless of event type
+    const coords = getEventCoordinates(e);
+    
+    // For touch events, track that we're dragging
+    if (e.type === 'touchmove') {
+      isTouchDragging = true;
+    }
+    
+    // Use a more efficient approach to find the element under the cursor/finger
+    const elemBelow = elementFromPointWithDraggable(coords.clientX, coords.clientY, draggablePiece);
     if (!elemBelow) return;
     
     // Check if we're over a board square and it's not the source square
@@ -598,10 +631,21 @@ document.addEventListener('DOMContentLoaded', () => {
       simulateMoveAndShowResponse(dragSourceSquare, targetSquare);
       isPeekCalculating = false;
     });
-  });
+  }
   
-  // Clear highlights when drag ends
-  document.addEventListener('mouseup', () => {
+  // Helper function to handle pointer release (both mouse and touch)
+  function handlePointerUp(e) {
+    // For touch events, check if we were dragging
+    if (e.type === 'touchend' && !isTouchDragging) {
+      // Not dragging, this was just a tap - don't clear highlighting yet
+      isTouchDragging = false;
+      return;
+    }
+    
+    // Reset touch tracking
+    isTouchDragging = false;
+    lastTouchSquare = null;
+    
     // Clear drag source tracking
     dragSourceSquare = null;
     
@@ -634,22 +678,128 @@ document.addEventListener('DOMContentLoaded', () => {
         piece.style.opacity = '';
       });
     }
+  }
+  
+  // Create a special handler for compatibility with CM-Chessboard's touch events
+  function handleChessboardTouchEvents() {
+    // Find the chessboard's DOM container
+    const boardElement = document.querySelector('.cm-chessboard');
+    if (!boardElement) return;
+    
+    // Add a passive touchstart listener to capture the square before CM-Chessboard processes it
+    boardElement.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      const element = document.elementFromPoint(touch.clientX, touch.clientY);
+      
+      if (element && element.classList.contains('square')) {
+        lastTouchSquare = element.getAttribute('data-square');
+        dragSourceSquare = lastTouchSquare;
+        
+        // Since this is passive, we can't prevent default, but we track that a touch started
+        isTouchDragging = false;
+      } else if (element && element.closest('.piece')) {
+        // If touching a piece, find its square
+        const pieceElement = element.closest('.piece');
+        const square = pieceElement.getAttribute('data-square');
+        if (square) {
+          lastTouchSquare = square;
+          dragSourceSquare = square;
+          isTouchDragging = false;
+        }
+      }
+    }, { passive: true });
+  }
+  
+  // Track the start of drag operations - mouse
+  document.addEventListener('mousedown', (e) => {
+    const target = e.target;
+    if (target && target.classList.contains('square')) {
+      dragSourceSquare = target.getAttribute('data-square');
+    } else if (target && target.closest('.square')) {
+      // The target might be a piece inside a square
+      const square = target.closest('.square');
+      dragSourceSquare = square.getAttribute('data-square');
+    }
+  });
+  
+  // Mouse move listener
+  document.addEventListener('mousemove', handlePointerMove);
+  
+  // Mouse up listener
+  document.addEventListener('mouseup', handlePointerUp);
+  
+  // Touch event support
+  document.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    if (target && target.classList.contains('square')) {
+      dragSourceSquare = target.getAttribute('data-square');
+      lastTouchSquare = dragSourceSquare;
+    } else if (target && target.closest('.square')) {
+      // The target might be a piece inside a square
+      const square = target.closest('.square');
+      dragSourceSquare = square.getAttribute('data-square');
+      lastTouchSquare = dragSourceSquare;
+    }
+  }, { passive: false });
+  
+  // Touch move listener with non-passive option to allow preventDefault
+  document.addEventListener('touchmove', (e) => {
+    // Prevent page scrolling when dragging pieces
+    if (dragSourceSquare) {
+      e.preventDefault();
+    }
+    handlePointerMove(e);
+  }, { passive: false });
+  
+  // Touch end listener
+  document.addEventListener('touchend', handlePointerUp);
+  
+  // Setup CM-Chessboard specific touch handlers
+  handleChessboardTouchEvents();
+  
+  // On window resize, clear any peek visualizations to avoid misaligned elements
+  window.addEventListener('resize', () => {
+    clearPeekVisualizations();
+    resetChessPieceOpacity();
   });
 });
 
 // Helper function to find element below draggable piece without hiding it
 function elementFromPointWithDraggable(x, y, draggablePiece) {
-  // Save current styles to restore later
-  const originalPointerEvents = draggablePiece.style.pointerEvents;
+  // If no draggable piece is provided, just return the element at the point
+  if (!draggablePiece) {
+    return document.elementFromPoint(x, y);
+  }
   
-  // Make draggable piece "transparent" to mouse events
-  draggablePiece.style.pointerEvents = 'none';
+  // Find all draggable elements to make them temporarily transparent to pointer events
+  const draggableElements = [
+    draggablePiece,
+    document.querySelector('.cm-chessboard-draggable-piece'),
+    document.querySelector('.cm-chessboard .dragging')
+  ].filter(el => el); // Filter out null/undefined elements
+  
+  // Save current styles to restore later
+  const originalStyles = draggableElements.map(el => ({
+    element: el,
+    pointerEvents: el.style.pointerEvents,
+    zIndex: el.style.zIndex
+  }));
+  
+  // Make draggable elements "transparent" to mouse/touch events
+  draggableElements.forEach(el => {
+    el.style.pointerEvents = 'none';
+  });
   
   // Get the element below
   const element = document.elementFromPoint(x, y);
   
   // Restore original styles
-  draggablePiece.style.pointerEvents = originalPointerEvents;
+  originalStyles.forEach(item => {
+    item.element.style.pointerEvents = item.pointerEvents;
+    item.element.style.zIndex = item.zIndex;
+  });
   
   return element;
 }
