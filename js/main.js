@@ -375,15 +375,32 @@ function inputHandler(event) {
     }
     
     // No piece selected or invalid destination - try to select a new piece
-    const moves = game.getMovesAtSquare(event.square);
-    if (moves.length > 0) {
-      console.log("Selecting piece at", event.square);
-      selectedPiece = event.square;
-      for (const move of moves) {
-        event.chessboard.addMarker(MARKER_TYPE.dot, move);
+    // Get the piece at the square
+    const position = game.getFEN().split(' ')[0];
+    const piece = getPieceAtSquare(position, event.square);
+    
+    // Check if the piece belongs to the current player (white vs black)
+    const isWhiteTurn = game.getFEN().split(' ')[1] === 'w';
+    
+    // Check if clicked on a piece of the current player's color
+    if (piece) {
+      const isWhitePiece = piece.toUpperCase() === piece;
+      if (isWhiteTurn === isWhitePiece) {
+        // Always allow selecting a piece of the current player, even if it can't move
+        console.log("Selecting piece at", event.square);
+        selectedPiece = event.square;
+        
+        // Show possible moves (if any)
+        const moves = game.getMovesAtSquare(event.square);
+        for (const move of moves) {
+          event.chessboard.addMarker(MARKER_TYPE.dot, move);
+        }
+        
+        // Always return true to allow piece selection even if there are no moves
+        return true;
       }
-      return true;
     }
+    
     selectedPiece = null;
     return false;
   } else if (event.type === INPUT_EVENT_TYPE.moveInputCanceled) {
@@ -417,11 +434,6 @@ function inputHandler(event) {
           } else {
             playSound('move');
           }
-          
-          /* Commented out evaluation-based sound
-          const evaluation = game.evaluatePosition();
-          playSoundFeedback(evaluation);
-          */
           
           event.chessboard.enableMoveInput(inputHandler);
           setTimeout(() => {
