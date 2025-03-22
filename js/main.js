@@ -605,9 +605,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only continue with Peek functionality if Peek mode is enabled
     if (!peekModeEnabled) return;
     
-    // Check if this is a legal move
+    // Check if this could be a legal move
+    // First try getMovesAtSquare for efficiency
     const moves = game.getMovesAtSquare(dragSourceSquare);
-    if (!moves || !moves.includes(targetSquare)) return;
+    
+    // Direct move validation for check-blocking moves or other special cases
+    // that might not be captured by getMovesAtSquare
+    let isLegalMove = false;
+    
+    // If the move is in the list from getMovesAtSquare, it's definitely legal
+    if (moves && moves.includes(targetSquare)) {
+      isLegalMove = true;
+    } else {
+      // For moves not in the list, we'll do a more direct check
+      // This is especially important for moves that block check
+      
+      // Save current state
+      const currentFEN = game.getFEN();
+      
+      // Try to make the move directly and see if it's valid
+      // This is more reliable than just checking the list of moves
+      const moveResult = game.move(dragSourceSquare, targetSquare);
+      
+      // If the move was made successfully, it's legal
+      if (moveResult) {
+        isLegalMove = true;
+        console.log(`[PEEK] Move ${dragSourceSquare}-${targetSquare} validated directly as legal`);
+        
+        // Restore position
+        game.setFEN(currentFEN);
+      }
+    }
+    
+    // Skip peek calculations if not a legal move after all checks
+    if (!isLegalMove) return;
     
     // Only process if this is a different square than last time
     if (targetSquare === lastHoveredSquare) return;
